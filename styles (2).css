@@ -12,3 +12,5 @@
 .signal-reasons>span{display:block;font-size:10px;letter-spacing:.14em;opacity:.6;margin-bottom:8px}
 .signal-reasons>div{display:flex;flex-wrap:wrap;gap:6px}
 .signal-reasons em{font-style:normal;font-size:11px;padding:6px 8px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07)}
+
+.trade-monitor{margin-top:18px}.trade-list{display:grid;gap:8px}.trade-row{display:grid;grid-template-columns:1.4fr .9fr .8fr 1.2fr .8fr .9fr;gap:12px;align-items:center;border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:12px 14px;background:rgba(255,255,255,.015)}.trade-row>div{display:flex;flex-direction:column;gap:4px}.trade-row small{font-size:10px;color:#8f8a9e}.trade-row b{font-size:13px}.trade-row .buy{color:#5ee7b2}.trade-row .sell{color:#ff718f}.trade-empty{min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center;color:#8f8a9e}.trade-empty b{color:#e9e4ef}.trade-empty span{font-size:12px;max-width:560px}@media(max-width:900px){.trade-row{grid-template-columns:1fr 1fr}.trade-row>div:nth-child(n+3){min-width:0}.trade-row>div:nth-child(n+3) b{font-size:12px}} 
