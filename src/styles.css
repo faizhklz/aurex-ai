@@ -165,8 +165,8 @@ body{
  align-items:center;
  position:relative;
  background:
- linear-gradient(rgba(0,0,0,.65),rgba(0,0,0,.65)),
- url("/public_landing.png") center/cover no-repeat;
+ radial-gradient(circle at 50% 35%,rgba(212,175,55,.10),transparent 38%),
+ #050505;
 }
 
 .auth-card{
