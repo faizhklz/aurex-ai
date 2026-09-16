@@ -1,0 +1,66 @@
+body{
+ margin:0;
+ font-family:Inter,Arial,sans-serif;
+ background:#050507;
+}
+
+.hero{
+ height:100vh;
+ background:
+ linear-gradient(90deg,rgba(3,3,8,.95),rgba(3,3,8,.35)),
+ url("/sniper-bg.png");
+ background-size:cover;
+ background-position:center;
+ display:flex;
+ align-items:center;
+ padding-left:8%;
+ color:white;
+}
+
+.hero-content{max-width:700px;}
+
+.tag{
+ font-size:13px;
+ letter-spacing:3px;
+ color:#d8b34c;
+}
+
+h1{
+ font-size:80px;
+ line-height:.95;
+ font-weight:900;
+ margin:25px 0;
+}
+
+h1 span{color:#f4c542;}
+
+p{
+ font-size:18px;
+ line-height:1.6;
+ color:#ccc;
+ max-width:600px;
+}
+
+.buttons{
+ margin-top:35px;
+ display:flex;
+ gap:15px;
+}
+
+.create{
+ background:linear-gradient(135deg,#ffe58a,#dcae20);
+ border:none;
+ padding:18px 45px;
+ border-radius:8px;
+ font-weight:900;
+ color:#111;
+}
+
+.login{
+ background:#050505;
+ border:1px solid #dcae20;
+ color:#f4c542;
+ padding:18px 45px;
+ border-radius:8px;
+ font-weight:900;
+}
