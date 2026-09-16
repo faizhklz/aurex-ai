@@ -89,49 +89,7 @@ function AuthScreen({ mode, setMode, onAuthed }) {
   async function submit(e){ e.preventDefault(); setError(""); if(mode==="register" && password!==confirm){setError("Password confirmation does not match.");return;} setBusy(true); try{ const r=await fetch(`/api/auth/${mode}`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email,name,password})}); const j=await r.json(); if(!r.ok) throw new Error(j.error||"Request failed"); onAuthed(j.user); }catch(err){setError(err.message)}finally{setBusy(false)} }
   return <div className="auth-wrap"><div className="auth-card"><div className="brand auth-brand"><div className="logo">A</div><div><strong>SNIPER XAUUSD</strong><small>AI GOLD INTELLIGENCE</small></div></div><div className="auth-kicker">GOLD INTELLIGENCE PLATFORM</div><h1>{mode==="register"?"Create your SNIPER XAUUSD account":"Welcome back"}</h1><p className="auth-sub">{mode==="register"?"Register first to access the SNIPER XAUUSD dashboard.":"Login to continue to SNIPER XAUUSD."}</p><form onSubmit={submit}>{mode==="register"&&<label>Name<input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name" required/></label>}<label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" required/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" minLength="8" required/></label>{mode==="register"&&<label>Confirm Password<input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} placeholder="••••••••" minLength="8" required/></label>}{error&&<div className="auth-error">{error}</div>}<button className="primary auth-submit" disabled={busy}>{busy?"Please wait…":mode==="register"?"CREATE ACCOUNT":"LOGIN"}</button></form><div className="auth-switch">{mode==="register"?<>Already registered? <button onClick={()=>setMode("login")}>Login</button></>:<>New to SNIPER XAUUSD? <button onClick={()=>setMode("register")}>Create account</button></>}</div><small className="auth-note">Dashboard access requires an authenticated SNIPER XAUUSD account. Subscription access is checked after login.</small></div></div>;
 }
-function Landing({ onStart }) { 
-return <div className="landing">
-<div className="landing-top">
-<div className="brand">
-<div className="logo">A</div>
-<div><strong>SNIPER XAUUSD</strong><small>AI GOLD INTELLIGENCE</small></div>
-</div>
-<button className="ghost" onClick={()=>onStart("login")}>LOGIN</button>
-</div>
-
-<div className="landing-hero">
-<span className="muted">XAUUSD · AI POWERED PRECISION TRADING</span>
-
-<h1>
-TRADE GOLD LIKE A<br/>
-<em>SNIPER.</em>
-</h1>
-
-<p>
-Real-time XAUUSD data, sniper AI signals, TP/SL monitoring,
-macro news and multi-timeframe analysis — all in one elite trading platform.
-</p>
-
-<div className="landing-actions">
-<button className="primary" onClick={()=>onStart("register")}>
-CREATE ACCOUNT
-</button>
-
-<button className="ghost" onClick={()=>onStart("login")}>
-LOGIN
-</button>
-</div>
-</div>
-
-<div className="landing-features">
-<span>LIVE XAUUSD</span>
-<span>M1 · M5 · M15 · M30 · H1</span>
-<span>TP1 · TP2 · SL · BE MONITOR</span>
-<span>HIGH-IMPACT NEWS</span>
-</div>
-
-</div>
-}
+function Landing({ onStart }) { return <div className="landing"><div className="landing-top"><div className="brand"><div className="logo">S</div><div><strong>SNIPER XAUUSD</strong><small>AI GOLD INTELLIGENCE</small></div></div></div><div className="landing-hero"><span className="muted">XAUUSD · AI POWERED PRECISION TRADING</span><h1>TRADE GOLD LIKE A<br/><em>SNIPER.</em></h1><p>Real-time XAUUSD data, AI signals, TP/SL monitoring and multi-timeframe analysis in one elite trading platform.</p><div className="landing-actions"><button className="gold-btn" onClick={()=>onStart("register")}>CREATE ACCOUNT →</button><button className="dark-btn" onClick={()=>onStart("login")}>LOGIN</button></div></div></div> }
 function SubscriptionGate({ user, onLogout }) { return <div className="gate"><div className="gate-card"><div className="brand auth-brand"><div className="logo">A</div><div><strong>SNIPER XAUUSD</strong><small>AI GOLD INTELLIGENCE</small></div></div><span className="muted">ACCOUNT ACCESS</span><h1>Subscription required</h1><p>Your account is registered, but an active subscription is required to open the trading dashboard.</p><div className="gate-info"><span>Account</span><b>{user?.email}</b></div><button className="primary">VIEW PLANS</button><button className="ghost wide" onClick={onLogout}>LOG OUT</button><small>Payment and automatic subscription activation will be connected after the membership system is configured.</small></div></div> }
 function AdminPanel({user}) {
   const [users,setUsers]=useState([]), [busy,setBusy]=useState(false), [error,setError]=useState("");
