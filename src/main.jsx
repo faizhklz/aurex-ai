@@ -1,84 +1,63 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Activity, Bell, CandlestickChart, Clock3, History, LayoutDashboard, Newspaper, Settings, ShieldCheck, Sparkles, Target, TrendingDown, TrendingUp } from "lucide-react";
+import { Activity, Bell, CandlestickChart, Clock3, History, LayoutDashboard, Newspaper, ShieldCheck, Sparkles, Target, TrendingDown, TrendingUp, WalletCards } from "lucide-react";
 import "./styles.css";
 
-const fmt = (n, d=2) => n == null ? "—" : Number(n).toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
-const empty = {configured:false,source:"—",instrument:"XAUUSD",price:null,bid:null,ask:null,time:null,candles:[],signal:{status:"WAITING",title:"Waiting for Live Confirmation",note:"Connect the live XAUUSD provider to activate market detection.",confidence:0,entry:null,sl:null,tp1:null,tp2:null,rr:"1 : 2",timeframe:"M15",setup:"STRICT FILTER",updated:"—"},indicators:{}};
+const fmt = (n, d = 2) => n == null ? "—" : Number(n).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const empty = { configured:false, source:"—", instrument:"XAUUSD", price:null, bid:null, ask:null, time:null, candles:[], signal:{status:"WAIT",title:"Waiting for Live Confirmation",note:"Connect the live XAUUSD provider to activate market detection.",confidence:0,entry:null,sl:null,tp1:null,tp2:null,rr:"1 : 2",timeframe:"M15",setup:"STRICT FILTER",updated:"—"}, indicators:{} };
 
-function Chart({candles}) {
-  const data = candles.slice(-60);
+function Chart({ candles, compact=false }) {
+  const data = (candles || []).slice(-60);
   if (!data.length) return <div className="chart-empty"><CandlestickChart size={30}/><span>Waiting for real XAUUSD candles…</span></div>;
-  const lo=Math.min(...data.map(c=>c.low)), hi=Math.max(...data.map(c=>c.high)), range=Math.max(hi-lo,.01);
-  const x=i=>25+i*950/Math.max(data.length-1,1);
-  const y=p=>350-(p-lo)/range*310;
-  return <div className="chart">
+  const lo = Math.min(...data.map(c => c.low)), hi = Math.max(...data.map(c => c.high)), range = Math.max(hi-lo, .01);
+  const x = i => 25 + i * 950 / Math.max(data.length-1, 1);
+  const y = p => 350 - (p-lo)/range*310;
+  return <div className={"chart "+(compact?"compact":"")}>
     <svg viewBox="0 0 1000 380" preserveAspectRatio="none">
       {Array.from({length:7}).map((_,i)=><line key={i} x1="0" y1={i*55} x2="1000" y2={i*55} className="gridline"/>)}
-      {data.map((c,i)=>{
-        const up=c.close>=c.open, cx=x(i), top=y(Math.max(c.open,c.close)), bottom=y(Math.min(c.open,c.close));
-        return <g key={c.time+i}>
-          <line x1={cx} y1={y(c.high)} x2={cx} y2={y(c.low)} className={up?"wick up":"wick down"}/>
-          <rect x={cx-5} y={top} width="10" height={Math.max(2,bottom-top)} className={up?"body up":"body down"}/>
-        </g>
-      })}
+      {data.map((c,i)=>{ const up=c.close>=c.open, cx=x(i), top=y(Math.max(c.open,c.close)), bottom=y(Math.min(c.open,c.close)); return <g key={c.time+i}><line x1={cx} y1={y(c.high)} x2={cx} y2={y(c.low)} className={up?"wick up":"wick down"}/><rect x={cx-5} y={top} width="10" height={Math.max(2,bottom-top)} className={up?"body up":"body down"}/></g> })}
     </svg>
-    <div className="live"><i/> LIVE XAUUSD</div><div className="tf">M15</div>
-    <div className="price-axis">{fmt(data.at(-1)?.close,2)}</div>
-  </div>
+    <div className="live"><i/> LIVE XAUUSD</div><div className="tf">M15</div><div className="price-axis">{fmt(data.at(-1)?.close,2)}</div>
+  </div>;
 }
-
-function Metric({label,value}){ return <div className="metric"><span>{label}</span><b>{value}</b></div> }
+function Metric({label,value}) { return <div className="metric"><span>{label}</span><b>{value}</b></div>; }
+function PanelHead({title,subtitle,icon:Icon=Activity}) { return <div className="panel-head"><div><b>{title}</b>{subtitle && <span>{subtitle}</span>}</div><Icon size={17}/></div>; }
+function SignalCard({s, large=false}) { return <div className={"signal "+(s.status==="BUY"?"buy":s.status==="SELL"?"sell":"wait")+(large?" large":"")}>
+  <div className="signal-top"><span className="pill">{s.status}</span><strong>{s.title}</strong></div><p>{s.note}</p>
+  <div className="signal-grid"><Metric label="ENTRY" value={fmt(s.entry,2)}/><Metric label="STOP LOSS" value={fmt(s.sl,2)}/><Metric label="TP1" value={fmt(s.tp1,2)}/><Metric label="TP2" value={fmt(s.tp2,2)}/><Metric label="CONFIDENCE" value={`${s.confidence||0}%`}/><Metric label="R:R" value={s.rr||"—"}/></div>
+</div>; }
 
 function App(){
-  const [data,setData]=useState(empty), [connected,setConnected]=useState(false), [tab,setTab]=useState("Dashboard"), [notif,setNotif]=useState(false);
-  async function load(){
-    try{
-      const r=await fetch("/api/market/xauusd?granularity=M15&count=120",{cache:"no-store"});
-      const j=await r.json();
-      setData(j); setConnected(Boolean(j.configured));
-    }catch(e){ setConnected(false); }
-  }
-  useEffect(()=>{load(); const id=setInterval(load,5000); return()=>clearInterval(id)},[]);
-  async function enablePush(){
-    if(!("Notification" in window)){alert("Browser notifications are not supported.");return}
-    const p=await Notification.requestPermission();
-    setNotif(p==="granted");
-  }
+  const [data,setData]=useState(empty), [connected,setConnected]=useState(false), [tab,setTab]=useState("Dashboard"), [notif,setNotif]=useState(false), [history,setHistory]=useState([]);
+  async function load(){ try { const r=await fetch("/api/market/xauusd?granularity=M15&count=120",{cache:"no-store"}); const j=await r.json(); setData(j); setConnected(Boolean(j.configured)); } catch(e){ setConnected(false); } }
+  useEffect(()=>{ load(); const id=setInterval(load,5000); return()=>clearInterval(id); },[]);
+  useEffect(()=>{ if(!data.signal || !data.time) return; setHistory(prev=>{ const key=`${data.time}-${data.signal.status}-${data.signal.entry}`; if(prev.some(x=>x.key===key)) return prev; const next=[{key,time:data.time,status:data.signal.status,title:data.signal.title,entry:data.signal.entry,sl:data.signal.sl,tp1:data.signal.tp1,tp2:data.signal.tp2,confidence:data.signal.confidence},...prev].slice(0,20); return next; }); },[data.signal,data.time]);
+  async function enablePush(){ if(!("Notification" in window)){alert("Browser notifications are not supported.");return;} const p=await Notification.requestPermission(); setNotif(p==="granted"); }
   const s=data.signal||empty.signal;
   const nav=[["Dashboard",LayoutDashboard],["Signals",Target],["History",History],["News",Newspaper],["AI Analysis",Sparkles]];
-  return <div className="app">
-    <aside><div className="brand"><div className="logo">A</div><div><strong>AUREX</strong><small>AI GOLD INTELLIGENCE</small></div></div>
-      <nav>{nav.map(([n,I])=><button className={tab===n?"active":""} onClick={()=>setTab(n)} key={n}><I size={17}/>{n}</button>)}</nav>
-      <div className="side-note"><ShieldCheck size={16}/><span>No MT5 required<br/><small>Provider feed → AUREX engine</small></span></div>
-    </aside>
-    <main>
-      <header><div><div className="eyebrow">MARKET INTELLIGENCE</div><h1>{tab}</h1></div>
-        <div className="header-actions"><div className={connected?"status live-status":"status"}><i/> {connected?"LIVE FEED":"FEED OFFLINE"}</div><button className="iconbtn" onClick={enablePush} title="Enable notifications"><Bell size={18}/></button></div>
-      </header>
-      <section className="hero">
-        <div><span className="muted">XAUUSD · SPOT GOLD</span><div className="big-price">{fmt(data.price,2)}</div><div className="quote">{data.bid!=null?`Bid ${fmt(data.bid,2)} · Ask ${fmt(data.ask,2)}`:"Provider quote unavailable"}</div></div>
-        <div className="hero-right"><Metric label="TIMEFRAME" value="M15"/><Metric label="SOURCE" value={data.source||"—"}/><Metric label="UPDATED" value={data.time?new Date(data.time).toLocaleTimeString():"—"}/></div>
-      </section>
-      <section className="grid2">
-        <div className="panel chart-panel"><div className="panel-head"><div><b>Live Price Action</b><span>Real provider candles — not demo data</span></div><Clock3 size={17}/></div><Chart candles={data.candles||[]}/></div>
-        <div className="panel signal-panel"><div className="panel-head"><div><b>Signal Engine</b><span>Strict M15 confirmation</span></div><Activity size={17}/></div>
-          <div className={"signal "+(s.status==="BUY"?"buy":s.status==="SELL"?"sell":"wait")}>
-            <div className="signal-top"><span className="pill">{s.status}</span><strong>{s.title}</strong></div>
-            <p>{s.note}</p>
-            <div className="signal-grid"><Metric label="ENTRY" value={fmt(s.entry,2)}/><Metric label="STOP LOSS" value={fmt(s.sl,2)}/><Metric label="TP1" value={fmt(s.tp1,2)}/><Metric label="TP2" value={fmt(s.tp2,2)}/><Metric label="CONFIDENCE" value={`${s.confidence||0}%`}/><Metric label="R:R" value={s.rr||"—"}/></div>
-          </div>
-          <div className="indicator-row"><Metric label="M15 EMA20" value={fmt(data.indicators?.m15Ema20,2)}/><Metric label="M15 EMA50" value={fmt(data.indicators?.m15Ema50,2)}/><Metric label="RSI" value={fmt(data.indicators?.rsi,1)}/><Metric label="ATR" value={fmt(data.indicators?.atr,2)}/></div>
-        </div>
-      </section>
-      <section className="lower">
-        <div className="panel"><div className="panel-head"><div><b>Detection Logic</b><span>Signal only when filters align</span></div><Sparkles size={17}/></div>
-          <div className="logic"><span>M15 trend</span><span>EMA structure</span><span>RSI</span><span>MACD</span><span>Volatility</span><span>Market structure</span></div>
-        </div>
-        <div className="panel"><div className="panel-head"><div><b>Alerts</b><span>{notif?"Browser notifications enabled":"Enable when you want phone/desktop alerts"}</span></div><Bell size={17}/></div><button className="primary" onClick={enablePush}>{notif?"Notifications Enabled":"Enable Notifications"}</button></div>
-      </section>
-      <footer><span>© AUREX AI</span><span>Market data source: {data.source||"not connected"} · XAUUSD is OTC and quotes vary by provider.</span></footer>
+  const ind=data.indicators||{};
+  const bias=s.status==="BUY"?"Bullish":s.status==="SELL"?"Bearish":"Neutral";
+  const analysis = useMemo(()=>{
+    const ema20=Number(ind.m15Ema20), ema50=Number(ind.m15Ema50), rsi=Number(ind.rsi), atr=Number(ind.atr);
+    return { trend: ema20>ema50?"Bullish structure":ema20<ema50?"Bearish structure":"Mixed structure", momentum:rsi>=52?"Positive momentum":rsi<=48?"Negative momentum":"Balanced momentum", volatility:atr?`ATR ${fmt(atr,2)} on M15`:"Waiting for ATR", pricePosition:data.price&&ema20?(data.price>ema20?"Price above EMA20":"Price below EMA20"):"Waiting for price" };
+  },[ind,data.price]);
+
+  const page = {
+    Dashboard:<>
+      <section className="hero"><div><span className="muted">XAUUSD · SPOT GOLD</span><div className="big-price">{fmt(data.price,2)}</div><div className="quote">{data.bid!=null?`Bid ${fmt(data.bid,2)} · Ask ${fmt(data.ask,2)}`:"Provider quote unavailable"}</div></div><div className="hero-right"><Metric label="TIMEFRAME" value="M15"/><Metric label="SOURCE" value={data.source||"—"}/><Metric label="UPDATED" value={data.time?new Date(data.time).toLocaleTimeString():"—"}/></div></section>
+      <section className="grid2"><div className="panel chart-panel"><PanelHead title="Live Price Action" subtitle="Real provider candles — not demo data" icon={Clock3}/><Chart candles={data.candles}/></div><div className="panel signal-panel"><PanelHead title="Signal Engine" subtitle="Strict M15 confirmation"/><SignalCard s={s}/><div className="indicator-row"><Metric label="M15 EMA20" value={fmt(ind.m15Ema20,2)}/><Metric label="M15 EMA50" value={fmt(ind.m15Ema50,2)}/><Metric label="RSI" value={fmt(ind.rsi,1)}/><Metric label="ATR" value={fmt(ind.atr,2)}/></div></div></section>
+      <section className="lower"><div className="panel"><PanelHead title="Detection Logic" subtitle="Signal only when filters align" icon={Sparkles}/><div className="logic"><span>M15 trend</span><span>EMA structure</span><span>RSI</span><span>MACD</span><span>Volatility</span><span>Market structure</span></div></div><div className="panel"><PanelHead title="Alerts" subtitle={notif?"Browser notifications enabled":"Enable when you want alerts"} icon={Bell}/><button className="primary" onClick={enablePush}>{notif?"Notifications Enabled":"Enable Notifications"}</button></div></section>
+    </>,
+    Signals:<section className="page-stack"><div className="page-intro"><div><span className="muted">SIGNAL CENTER</span><h2>Trade Signals</h2><p>Current M15 setup with entry, risk and target levels.</p></div><div className="bias-card"><span>MARKET BIAS</span><b className={s.status.toLowerCase()}>{bias}</b></div></div><div className="signal-page-grid"><div className="panel"><PanelHead title="Current Setup" subtitle="Updated from live XAUUSD feed" icon={Target}/><SignalCard s={s} large/></div><div className="panel"><PanelHead title="M15 Indicators" subtitle="Current technical readings"/><div className="stats-list"><Metric label="PRICE" value={fmt(data.price,2)}/><Metric label="EMA20" value={fmt(ind.m15Ema20,2)}/><Metric label="EMA50" value={fmt(ind.m15Ema50,2)}/><Metric label="RSI" value={fmt(ind.rsi,1)}/><Metric label="ATR" value={fmt(ind.atr,2)}/><Metric label="SOURCE" value={data.source||"—"}/></div></div></div><div className="panel"><PanelHead title="Signal Rules" subtitle="Transparent confirmation filters" icon={ShieldCheck}/><div className="rule-grid"><span>Trend alignment</span><span>EMA structure</span><span>RSI range</span><span>MACD direction</span><span>Volatility check</span><span>Market structure</span></div></div></section>,
+    History:<section className="page-stack"><div className="page-intro"><div><span className="muted">SIGNAL LOG</span><h2>Signal History</h2><p>Signals observed during this browser session.</p></div><div className="history-count"><b>{history.length}</b><span>records</span></div></div><div className="panel table-panel">{history.length?<table><thead><tr><th>TIME</th><th>STATUS</th><th>ENTRY</th><th>SL</th><th>TP1</th><th>TP2</th><th>CONF.</th></tr></thead><tbody>{history.map(x=><tr key={x.key}><td>{new Date(x.time).toLocaleTimeString()}</td><td><span className={"table-pill "+x.status.toLowerCase()}>{x.status}</span></td><td>{fmt(x.entry,2)}</td><td>{fmt(x.sl,2)}</td><td>{fmt(x.tp1,2)}</td><td>{fmt(x.tp2,2)}</td><td>{x.confidence||0}%</td></tr>)}</tbody></table>:<div className="empty-page"><History size={34}/><b>No signals recorded yet</b><span>As live updates arrive, the current signal snapshots will appear here.</span></div>}</div></section>,
+    News:<section className="page-stack"><div className="page-intro"><div><span className="muted">MACRO CALENDAR</span><h2>Gold Market News</h2><p>High-impact events to watch around XAUUSD.</p></div><div className="news-status"><span className="dot"/>Data module</div></div><div className="news-grid"><div className="panel news-card"><div className="news-icon"><Newspaper size={20}/></div><h3>CPI / Inflation</h3><p>Inflation releases can change expectations for rates and the US dollar, which can affect gold.</p><span className="tag">HIGH IMPACT</span></div><div className="panel news-card"><div className="news-icon"><Activity size={20}/></div><h3>NFP / Employment</h3><p>US labour-market data is a major macro event to watch for volatility in gold.</p><span className="tag">HIGH IMPACT</span></div><div className="panel news-card"><div className="news-icon"><Clock3 size={20}/></div><h3>FOMC / Fed</h3><p>Rate decisions, guidance and press conferences can materially move USD and precious metals.</p><span className="tag">HIGH IMPACT</span></div></div><div className="panel notice-panel"><ShieldCheck size={18}/><div><b>Live calendar feed is not connected yet.</b><span>This page is separated now; the next integration can connect a real economic-calendar provider without changing the dashboard layout.</span></div></div></section>,
+    "AI Analysis":<section className="page-stack"><div className="page-intro"><div><span className="muted">AUREX INTELLIGENCE</span><h2>AI Market Analysis</h2><p>Readable M15 context derived from the live technical feed.</p></div><div className="analysis-badge"><Sparkles size={15}/> M15</div></div><div className="analysis-grid"><div className="panel analysis-main"><PanelHead title="Current Market Read" subtitle="Technical context — not a guarantee" icon={Sparkles}/><div className="analysis-hero"><div><span>BIAS</span><b className={s.status.toLowerCase()}>{bias}</b></div><div><span>SIGNAL</span><b>{s.status}</b></div><div><span>CONFIDENCE</span><b>{s.confidence||0}%</b></div></div><div className="analysis-points"><div><TrendingUp size={17}/><div><b>Trend</b><span>{analysis.trend}</span></div></div><div><Activity size={17}/><div><b>Momentum</b><span>{analysis.momentum}</span></div></div><div><Target size={17}/><div><b>Price position</b><span>{analysis.pricePosition}</span></div></div><div><WalletCards size={17}/><div><b>Volatility</b><span>{analysis.volatility}</span></div></div></div></div><div className="panel"><PanelHead title="What AUREX Sees" subtitle="Live indicator snapshot"/><div className="insight-list"><p><b>EMA:</b> {fmt(ind.m15Ema20,2)} vs {fmt(ind.m15Ema50,2)}.</p><p><b>RSI:</b> {fmt(ind.rsi,1)}.</p><p><b>ATR:</b> {fmt(ind.atr,2)}.</p><p><b>Setup:</b> {s.setup||"STRICT FILTER"}.</p></div></div></div></section>
+  }[tab];
+
+  return <div className="app"><aside><div className="brand"><div className="logo">A</div><div><strong>AUREX</strong><small>AI GOLD INTELLIGENCE</small></div></div><nav>{nav.map(([n,I])=><button className={tab===n?"active":""} onClick={()=>setTab(n)} key={n}><I size={17}/>{n}</button>)}</nav><div className="side-note"><ShieldCheck size={16}/><span>No MT5 required<br/><small>Provider feed → AUREX engine</small></span></div></aside>
+    <main><header><div><div className="eyebrow">MARKET INTELLIGENCE</div><h1>{tab}</h1></div><div className="header-actions"><div className={connected?"status live-status":"status"}><i/> {connected?"LIVE FEED":"FEED OFFLINE"}</div><button className="iconbtn" onClick={enablePush} title="Enable notifications"><Bell size={18}/></button></div></header>
+      {page}<footer><span>© AUREX AI</span><span>Market data source: {data.source||"not connected"} · XAUUSD is OTC and quotes vary by provider.</span></footer>
     </main>
-  </div>
+  </div>;
 }
 createRoot(document.getElementById("root")).render(<App/>);
