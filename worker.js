@@ -123,11 +123,10 @@ async function marketResponse(env, granularity, count) {
   if (!env.TWELVE_DATA_API_KEY) return empty("Twelve Data API key is not configured in Cloudflare.");
   const intervalMap = { M1: "1min", M5: "5min", M15: "15min", M30: "30min", H1: "1h" };
   const interval = intervalMap[granularity] || "15min";
-  const [body] = await Promise.all([
-  getTimeSeries(env, interval, count)
+  const [body, priceBody] = await Promise.all([
+  getTimeSeries(env, interval, count),
+  getPrice(env).catch(() => ({ price: null }))
 ]);
-
-const priceBody = { price: null };
   const candles = (body.values || []).slice().reverse().map(c => ({
     time: c.datetime, open: Number(c.open), high: Number(c.high), low: Number(c.low), close: Number(c.close),
   })).filter(c => Number.isFinite(c.close));
