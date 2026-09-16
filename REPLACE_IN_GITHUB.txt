@@ -1,0 +1,25 @@
+SNIPER XAUUSD — D1 / AUTH BUG FIX
+
+Replace ONLY worker.js in GitHub first.
+
+Main fixes:
+1. PBKDF2 iterations reduced from 120000 to 100000 for Cloudflare Workers compatibility.
+2. Auth/register/login/logout are wrapped in try/catch and always return JSON instead of Cloudflare HTML 1101 pages.
+3. Password verification is explicit and compatible with existing salt.digest hashes.
+4. Added GET /api/health to test the live Worker + D1 binding.
+5. Admin endpoints also return JSON errors instead of crashing.
+6. The existing D1 binding name remains DB. Do not change/delete the Cloudflare dashboard binding.
+
+IMPORTANT:
+- Do NOT paste passwords or API keys into GitHub or chat.
+- Do NOT replace wrangler.jsonc yet unless instructed. The current Cloudflare dashboard binding DB -> aurex-ai-db is the binding we are testing.
+
+AFTER DEPLOY:
+Open this in browser:
+https://aurex-ai.faizhklz.workers.dev/api/health
+
+Expected if D1 is connected:
+{"ok":true,"db":true,"tables":["sessions","users"]}
+
+If you get db:false, the Worker deployment is not receiving the DB binding.
+If you get db:true but ok:false, the D1 database is connected but the schema/tables are missing.
