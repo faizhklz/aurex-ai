@@ -58,11 +58,11 @@ function App(){
       </header>
       <section className="hero">
         <div><span className="muted">XAUUSD · SPOT GOLD</span><div className="big-price">{fmt(data.price,2)}</div><div className="quote">{data.bid!=null?`Bid ${fmt(data.bid,2)} · Ask ${fmt(data.ask,2)}`:"Provider quote unavailable"}</div></div>
-        <div className="hero-right"><Metric label="TIMEFRAME" value="M15 / H1"/><Metric label="SOURCE" value={data.source||"—"}/><Metric label="UPDATED" value={data.time?new Date(data.time).toLocaleTimeString():"—"}/></div>
+        <div className="hero-right"><Metric label="TIMEFRAME" value="M15"/><Metric label="SOURCE" value={data.source||"—"}/><Metric label="UPDATED" value={data.time?new Date(data.time).toLocaleTimeString():"—"}/></div>
       </section>
       <section className="grid2">
         <div className="panel chart-panel"><div className="panel-head"><div><b>Live Price Action</b><span>Real provider candles — not demo data</span></div><Clock3 size={17}/></div><Chart candles={data.candles||[]}/></div>
-        <div className="panel signal-panel"><div className="panel-head"><div><b>Signal Engine</b><span>Strict multi-timeframe confirmation</span></div><Activity size={17}/></div>
+        <div className="panel signal-panel"><div className="panel-head"><div><b>Signal Engine</b><span>Strict M15 confirmation</span></div><Activity size={17}/></div>
           <div className={"signal "+(s.status==="BUY"?"buy":s.status==="SELL"?"sell":"wait")}>
             <div className="signal-top"><span className="pill">{s.status}</span><strong>{s.title}</strong></div>
             <p>{s.note}</p>
@@ -73,7 +73,7 @@ function App(){
       </section>
       <section className="lower">
         <div className="panel"><div className="panel-head"><div><b>Detection Logic</b><span>Signal only when filters align</span></div><Sparkles size={17}/></div>
-          <div className="logic"><span>H1 trend</span><span>M15 trend</span><span>EMA structure</span><span>RSI</span><span>MACD</span><span>Volatility</span><span>Market structure</span><span>Spread filter</span></div>
+          <div className="logic"><span>M15 trend</span><span>EMA structure</span><span>RSI</span><span>MACD</span><span>Volatility</span><span>Market structure</span></div>
         </div>
         <div className="panel"><div className="panel-head"><div><b>Alerts</b><span>{notif?"Browser notifications enabled":"Enable when you want phone/desktop alerts"}</span></div><Bell size={17}/></div><button className="primary" onClick={enablePush}>{notif?"Notifications Enabled":"Enable Notifications"}</button></div>
       </section>
