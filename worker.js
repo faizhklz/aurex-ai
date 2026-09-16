@@ -207,8 +207,75 @@ async function handleApi(request, env) {
   return null;
 }
 
+
+const SESSION_COOKIE = "aurex_session";
+const SESSION_DAYS = 30;
+const enc = new TextEncoder();
+function uuid(){return crypto.randomUUID()}
+function cookie(name,value,maxAge){return `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax`}
+async function hashPassword(password,salt){const key=await crypto.subtle.importKey("raw",enc.encode(password),"PBKDF2",false,["deriveBits"]);const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt:enc.encode(salt),iterations:120000,hash:"SHA-256"},key,256);return `${salt}.${[...new Uint8Array(bits)].map(x=>x.toString(16).padStart(2,"0")).join("")}`}
+async function makePasswordHash(password){return hashPassword(password,uuid())}
+async function verifyPassword(password,stored){const [salt,digest]=String(stored||"").split(".");if(!salt||!digest)return false;const h=await hashPassword(password,salt);return h===stored}
+function getCookie(req,name){const raw=req.headers.get("cookie")||"";return raw.split(";").map(x=>x.trim()).find(x=>x.startsWith(name+"="))?.slice(name.length+1)||null}
+async function currentUser(req,env){if(!env.DB)return null;const sid=getCookie(req,SESSION_COOKIE);if(!sid)return null;const row=await env.DB.prepare("SELECT u.id,u.name,u.email,u.role,u.subscription_status,u.subscription_plan,u.subscription_expires_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>? LIMIT 1").bind(sid,new Date().toISOString()).first();if(!row)return null;const active=String(row.subscription_status||"").toLowerCase()==="active"&&(!row.subscription_expires_at||row.subscription_expires_at>new Date().toISOString());return {...row,subscriptionActive:row.role==="admin"?true:active}}
+async function authRoute(req,env,path){
+ if(!env.DB)return json({error:"AUREX database is not connected yet. Create/bind the D1 database first."},503);
+ if(path==="/api/auth/me"){const user=await currentUser(req,env);return user?json({user}):json({user:null},401)}
+ if(path==="/api/auth/logout"){const sid=getCookie(req,SESSION_COOKIE);if(sid)await env.DB.prepare("DELETE FROM sessions WHERE id=?").bind(sid).run();return json({ok:true},200,{"set-cookie":cookie(SESSION_COOKIE,"",0)})}
+ if(req.method!=="POST")return json({error:"Method not allowed"},405);
+ const body=await req.json().catch(()=>({})); const email=String(body.email||"").trim().toLowerCase(); const password=String(body.password||"");
+ if(!email||!password)return json({error:"Email and password are required."},400);
+ if(path==="/api/auth/register"){
+   if(password.length<8)return json({error:"Password must be at least 8 characters."},400);
+   const exists=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(email).first();if(exists)return json({error:"An account with this email already exists."},409);
+   const now=new Date().toISOString(), name=String(body.name||email.split("@")[0]).trim()||"Member", ph=await makePasswordHash(password);
+   const inserted=await env.DB.prepare("INSERT INTO users(name,email,password_hash,role,subscription_status,subscription_plan,subscription_expires_at,created_at) VALUES(?,?,?,?,?,?,?,?)").bind(name,email,ph,"member","inactive","",null,now).run();
+   const id=inserted.meta?.last_row_id;
+   return loginUser(env,{id,name,email,role:"member",subscription_status:"inactive",subscription_plan:"",subscription_expires_at:null});
+ }
+ if(path==="/api/auth/login"){
+   const row=await env.DB.prepare("SELECT id,name,email,password_hash,role,subscription_status,subscription_plan,subscription_expires_at FROM users WHERE email=?").bind(email).first();if(!row||!(await verifyPassword(password,row.password_hash)))return json({error:"Invalid email or password."},401);return loginUser(env,row);
+ }
+ return json({error:"Not found"},404);
+}
+async function loginUser(env,row){const sid=uuid(), expires=new Date(Date.now()+SESSION_DAYS*86400000).toISOString();await env.DB.prepare("INSERT INTO sessions(id,user_id,expires_at,created_at) VALUES(?,?,?,?)").bind(sid,row.id,expires,new Date().toISOString()).run();const active=String(row.subscription_status||"").toLowerCase()==="active"&&(!row.subscription_expires_at||row.subscription_expires_at>new Date().toISOString());const user={id:row.id,name:row.name,email:row.email,role:row.role,subscriptionStatus:row.subscription_status,subscriptionPlan:row.subscription_plan,subscriptionActive:row.role==="admin"?true:active,subscriptionExpiresAt:row.subscription_expires_at};return json({user},200,{"set-cookie":cookie(SESSION_COOKIE,sid,SESSION_DAYS*86400)})}
+
+async function adminRoute(req, env, path) {
+  if (!env.DB) return json({error:"Database not connected."},503);
+  const admin = await currentUser(req, env);
+  if (!admin || admin.role !== "admin") return json({error:"Admin access required."},403);
+  if (req.method === "GET" && path === "/api/admin/users") {
+    const rows = await env.DB.prepare("SELECT id,name,email,role,subscription_status,subscription_plan,subscription_expires_at,created_at FROM users ORDER BY created_at DESC LIMIT 500").all();
+    return json({users: rows.results || []});
+  }
+  if (req.method === "POST" && path === "/api/admin/subscription") {
+    const body = await req.json().catch(()=>({}));
+    const userId = String(body.userId || "");
+    const status = String(body.status || "inactive").toLowerCase() === "active" ? "active" : "inactive";
+    const plan = String(body.plan || "").trim().slice(0,60);
+    const expires = body.expiresAt ? new Date(body.expiresAt).toISOString() : null;
+    if (!userId) return json({error:"userId is required."},400);
+    await env.DB.prepare("UPDATE users SET subscription_status=?, subscription_plan=?, subscription_expires_at=? WHERE id=?").bind(status,plan,expires,userId).run();
+    return json({ok:true});
+  }
+  if (req.method === "POST" && path === "/api/admin/role") {
+    const body = await req.json().catch(()=>({}));
+    const userId = String(body.userId || "");
+    const role = String(body.role || "member") === "admin" ? "admin" : "member";
+    if (!userId) return json({error:"userId is required."},400);
+    if (userId === String(admin.id) && role !== "admin") return json({error:"You cannot remove your own admin role here."},400);
+    await env.DB.prepare("UPDATE users SET role=? WHERE id=?").bind(role,userId).run();
+    return json({ok:true});
+  }
+  return json({error:"Not found"},404);
+}
+
 export default {
   async fetch(request, env) {
+    const url = new URL(request.url);
+    if (url.pathname.startsWith("/api/auth/")) return authRoute(request, env, url.pathname);
+    if (url.pathname.startsWith("/api/admin/")) return adminRoute(request, env, url.pathname);
+    if (url.pathname === "/api/auth/me") return authRoute(request, env, url.pathname);
     const api = await handleApi(request, env);
     if (api) return api;
     return env.ASSETS.fetch(request);
