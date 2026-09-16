@@ -19,37 +19,3 @@
 
 /* History layout isolation: keep live cards in normal document flow. */
 .history-section-title{display:flex;align-items:center;gap:10px;padding:4px 2px 2px}.history-section-title>div{display:grid;gap:3px}.history-section-title b{font-size:12px;letter-spacing:.08em}.history-section-title small{font-size:9px;color:#796d83}.section-dot{width:8px;height:8px;flex:0 0 8px;border-radius:50%;display:block}.live-dot{background:#c77dff;box-shadow:0 0 10px rgba(199,125,255,.55)}.done-dot{background:#65e0aa;box-shadow:0 0 10px rgba(101,224,170,.45)}.history-card.live,.history-card.completed{position:relative;left:auto;top:auto;right:auto;bottom:auto;display:block;width:100%;max-width:none;transform:none;float:none;clear:both}.history-section{width:100%;min-width:0}.history-cards{width:100%;min-width:0}.history-timeline{min-width:0}.history-card-head,.history-levels,.history-card-foot{min-width:0}@media(max-width:700px){.history-levels{grid-template-columns:repeat(2,1fr)}.history-card{padding:14px}.history-card-head{align-items:flex-start}.history-result{white-space:nowrap}.history-timeline{padding-bottom:8px}.timeline-step{min-width:100px}}
-
-/* FINAL HISTORY OVERLAP FIX */
-.page-stack {
-  position: relative;
-  display: grid;
-  gap: 16px;
-  isolation: isolate;
-}
-
-.page-stack > * {
-  position: relative;
-  z-index: 1;
-}
-
-.history-section {
-  position: relative;
-  display: grid;
-  gap: 10px;
-  clear: both;
-}
-
-.history-card,
-.history-section .panel {
-  position: relative !important;
-  inset: auto !important;
-  transform: none !important;
-  float: none !important;
-}
-
-.history-section-title {
-  position: relative;
-  z-index: 5;
-  background: #08060d;
-}
