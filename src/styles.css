@@ -97,3 +97,86 @@ body{
  background:linear-gradient(135deg,#8d4de8,#5d20aa)!important;
  color:white!important;
 }
+
+
+/* SNIPER GOLD FINAL THEME */
+body{
+  background:#050505;
+}
+
+.landing{
+  min-height:100vh;
+  width:100%;
+  position:relative;
+  overflow:hidden;
+  background:
+   linear-gradient(90deg,rgba(0,0,0,.65),rgba(0,0,0,.35)),
+   url("/public_landing.png") center/cover no-repeat;
+}
+
+.landing-top{
+ display:flex;
+ padding:40px 60px;
+}
+
+.landing-hero{
+ position:relative;
+ z-index:2;
+ max-width:720px;
+ margin:90px 0 0 90px;
+}
+
+.landing-hero h1{
+ font-size:72px;
+ line-height:.95;
+ font-weight:900;
+ color:#fff;
+}
+
+.landing-hero h1 em{
+ color:#f6c542;
+ font-style:normal;
+}
+
+.landing-actions{
+ display:flex;
+ gap:16px;
+ margin-top:35px;
+}
+
+.landing-actions .primary{
+ background:linear-gradient(135deg,#ffe27a,#d49a00);
+ color:#111;
+ border:0;
+ box-shadow:0 0 25px rgba(255,200,0,.35);
+}
+
+.landing-actions .ghost{
+ background:#080808;
+ border:1px solid #d5aa22;
+ color:#f6c542;
+}
+
+.auth-page{
+ min-height:100vh;
+ width:100%;
+ display:flex;
+ justify-content:center;
+ align-items:center;
+ position:relative;
+ background:
+ linear-gradient(rgba(0,0,0,.65),rgba(0,0,0,.65)),
+ url("/public_landing.png") center/cover no-repeat;
+}
+
+.auth-card{
+ background:rgba(8,6,13,.82);
+ backdrop-filter:blur(15px);
+ border:1px solid rgba(212,175,55,.45);
+ box-shadow:0 0 40px rgba(0,0,0,.7);
+}
+
+.auth-submit{
+ background:linear-gradient(135deg,#ffe27a,#d49a00)!important;
+ color:#111!important;
+}
