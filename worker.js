@@ -536,6 +536,26 @@ function evaluateTrade(trade, price, now){
   return {status,entryTime,tp1Time,tp2Time,slTime};
 }
 
+
+async function monitorOpenTrades(env){
+  if(!env.DB || !env.TWELVE_DATA_API_KEY) return {checked:0,updated:0};
+  await ensureTradesTable(env);
+  const rows=await env.DB.prepare(`SELECT * FROM trades WHERE status IN ('PENDING','ACTIVE','TP1 HIT') ORDER BY updated_at ASC LIMIT 5000`).all();
+  const trades=rows.results||[];
+  if(!trades.length) return {checked:0,updated:0};
+  const priceBody=await getPrice(env);
+  const price=Number(priceBody.price);
+  if(!Number.isFinite(price)) throw new Error('Twelve Data returned an invalid XAUUSD price.');
+  const now=new Date().toISOString();
+  let updated=0;
+  for(const trade of trades){
+    const next=evaluateTrade(trade,price,now);
+    await env.DB.prepare(`UPDATE trades SET status=?,entry_time=?,tp1_time=?,tp2_time=?,sl_time=?,last_price=?,updated_at=? WHERE id=?`).bind(next.status,next.entryTime,next.tp1Time,next.tp2Time,next.slTime,price,now,trade.id).run();
+    if(next.status!==String(trade.status||'PENDING').toUpperCase()) updated++;
+  }
+  return {checked:trades.length,updated,price};
+}
+
 async function tradesRoute(req, env, path){
   try{
     if(!env.DB) return json({error:"SNIPER XAUUSD database is not connected. Check the D1 binding named DB."},503);
@@ -635,6 +655,14 @@ async function healthRoute(env){
 }
 
 export default {
+  async scheduled(event, env, ctx) {
+    try {
+      ctx.waitUntil(monitorOpenTrades(env));
+    } catch (error) {
+      console.error("TRADE_MONITOR_CRON_ERROR", error);
+    }
+  },
+
   async fetch(request, env) {
     try {
       const url = new URL(request.url);
