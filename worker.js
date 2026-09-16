@@ -298,6 +298,45 @@ async function newsResponse(env) {
   return { configured: true, source: "US macro calendar", updatedAt: body.updatedAt || new Date().toISOString(), events };
 }
 
+async function yahooGoldFeed(granularity="M15", count=180){
+
+const interval =
+granularity==="M1" ? "1m" :
+granularity==="M5" ? "5m" :
+granularity==="M15" ? "15m" :
+"60m";
+
+const url =
+`https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=${interval}&range=5d`;
+
+const res = await fetch(url);
+
+if(!res.ok) throw new Error("Yahoo feed failed");
+
+const json = await res.json();
+
+const result = json.chart.result[0];
+
+const timestamps = result.timestamp;
+const quote = result.indicators.quote[0];
+
+return {
+ configured:true,
+ source:"Yahoo Finance",
+ symbol:"XAUUSD",
+ timeframe:granularity,
+ price:quote.close.at(-1),
+
+ candles: timestamps.map((t,i)=>({
+   time:new Date(t*1000),
+   open:quote.open[i],
+   high:quote.high[i],
+   low:quote.low[i],
+   close:quote.close[i]
+ })).slice(-count)
+};
+
+}
 async function handleApi(request, env) {
   const url = new URL(request.url);
   if (request.method !== "GET") return json({ error: "Method not allowed" }, 405);
