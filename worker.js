@@ -213,7 +213,7 @@ const SESSION_DAYS = 30;
 const enc = new TextEncoder();
 function uuid(){return crypto.randomUUID()}
 function cookie(name,value,maxAge){return `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax`}
-async function hashPassword(password,salt){const key=await crypto.subtle.importKey("raw",enc.encode(password),"PBKDF2",false,["deriveBits"]);const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt:enc.encode(salt),iterations:120000,hash:"SHA-256"},key,256);return `${salt}.${[...new Uint8Array(bits)].map(x=>x.toString(16).padStart(2,"0")).join("")}`}
+async function hashPassword(password,salt){const key=await crypto.subtle.importKey("raw",enc.encode(password),"PBKDF2",false,["deriveBits"]);const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt:enc.encode(salt),iterations:100000,hash:"SHA-256"},key,256);return `${salt}.${[...new Uint8Array(bits)].map(x=>x.toString(16).padStart(2,"0")).join("")}`}
 async function makePasswordHash(password){return hashPassword(password,uuid())}
 async function verifyPassword(password,stored){const [salt,digest]=String(stored||"").split(".");if(!salt||!digest)return false;const h=await hashPassword(password,salt);return h===stored}
 function getCookie(req,name){const raw=req.headers.get("cookie")||"";return raw.split(";").map(x=>x.trim()).find(x=>x.startsWith(name+"="))?.slice(name.length+1)||null}
