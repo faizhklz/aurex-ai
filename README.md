@@ -1,4 +1,4 @@
-# AUREX AI V7 — Member + Subscription + Admin
+# SNIPER XAUUSD AI V7 — Member + Subscription + Admin
 
 Standalone Cloudflare Worker + static assets. No MT5 and no AppDeploy.
 
