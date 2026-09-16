@@ -483,6 +483,97 @@ async function loginUser(env,row){
   return json({user},200,{"set-cookie":cookie(SESSION_COOKIE,sid,SESSION_DAYS*86400)});
 }
 
+
+async function ensureTradesTable(env){
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS trades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    signal_id TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'PENDING',
+    entry REAL NOT NULL,
+    sl REAL NOT NULL,
+    tp1 REAL NOT NULL,
+    tp2 REAL NOT NULL,
+    confidence REAL,
+    signal_time TEXT,
+    entry_time TEXT,
+    tp1_time TEXT,
+    tp2_time TEXT,
+    sl_time TEXT,
+    last_price REAL,
+    updated_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    UNIQUE(user_id, signal_id)
+  )`).run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_trades_user_updated ON trades(user_id, updated_at DESC)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_trades_open ON trades(status)").run();
+}
+
+function evaluateTrade(trade, price, now){
+  const direction=String(trade.direction).toUpperCase();
+  let status=String(trade.status||"PENDING").toUpperCase();
+  let entryTime=trade.entry_time||null, tp1Time=trade.tp1_time||null, tp2Time=trade.tp2_time||null, slTime=trade.sl_time||null;
+  const p=Number(price), entry=Number(trade.entry), sl=Number(trade.sl), tp1=Number(trade.tp1), tp2=Number(trade.tp2);
+  if(!Number.isFinite(p)) return {status,entryTime,tp1Time,tp2Time,slTime};
+  if(status==="PENDING"){
+    const filled=direction==="BUY" ? p>=entry : p<=entry;
+    if(filled){ status="ACTIVE"; entryTime=now; }
+  }
+  if(status==="ACTIVE" || status==="TP1 HIT"){
+    if(direction==="BUY"){
+      if(p<=sl){ status="SL HIT"; slTime=now; }
+      else if(p>=tp2){ status="TP2 HIT"; if(!tp2Time) tp2Time=now; if(!tp1Time) tp1Time=now; }
+      else if(p>=tp1){ status="TP1 HIT"; if(!tp1Time) tp1Time=now; }
+    } else {
+      if(p>=sl){ status="SL HIT"; slTime=now; }
+      else if(p<=tp2){ status="TP2 HIT"; if(!tp2Time) tp2Time=now; if(!tp1Time) tp1Time=now; }
+      else if(p<=tp1){ status="TP1 HIT"; if(!tp1Time) tp1Time=now; }
+    }
+  }
+  return {status,entryTime,tp1Time,tp2Time,slTime};
+}
+
+async function tradesRoute(req, env, path){
+  try{
+    if(!env.DB) return json({error:"SNIPER XAUUSD database is not connected. Check the D1 binding named DB."},503);
+    const user=await currentUser(req,env);
+    if(!user) return json({error:"Authentication required."},401);
+    await ensureTradesTable(env);
+
+    if(req.method==="GET" && path==="/api/trades"){
+      const rows=await env.DB.prepare(`SELECT id,signal_id,timeframe,direction,status,entry,sl,tp1,tp2,confidence,signal_time,entry_time,tp1_time,tp2_time,sl_time,last_price,updated_at,created_at FROM trades WHERE user_id=? ORDER BY created_at DESC LIMIT 200`).bind(user.id).all();
+      return json({trades:rows.results||[]});
+    }
+
+    if(req.method==="POST" && path==="/api/trades/sync"){
+      const body=await req.json().catch(()=>({}));
+      const signal=body.signal||{};
+      const price=Number(body.price);
+      if(!signal.id || !["BUY","SELL"].includes(String(signal.status).toUpperCase())) return json({ignored:true,reason:"No confirmed BUY/SELL signal."});
+      const nums=[signal.entry,signal.sl,signal.tp1,signal.tp2].map(Number);
+      if(nums.some(x=>!Number.isFinite(x)) || !Number.isFinite(price)) return json({error:"Invalid signal or price."},400);
+      const direction=String(signal.status).toUpperCase();
+      const now=new Date().toISOString();
+      const existing=await env.DB.prepare("SELECT * FROM trades WHERE user_id=? AND signal_id=? LIMIT 1").bind(user.id,String(signal.id)).first();
+      if(!existing){
+        await env.DB.prepare(`INSERT INTO trades(user_id,signal_id,timeframe,direction,status,entry,sl,tp1,tp2,confidence,signal_time,last_price,updated_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(user.id,String(signal.id),String(signal.timeframe||"M15"),direction,"PENDING",Number(signal.entry),Number(signal.sl),Number(signal.tp1),Number(signal.tp2),Number(signal.confidence||0),signal.candleTime||signal.updated||now,price,now,now).run();
+      }
+      const trade=existing || await env.DB.prepare("SELECT * FROM trades WHERE user_id=? AND signal_id=? LIMIT 1").bind(user.id,String(signal.id)).first();
+      const next=evaluateTrade(trade,price,now);
+      await env.DB.prepare(`UPDATE trades SET status=?,entry_time=?,tp1_time=?,tp2_time=?,sl_time=?,last_price=?,updated_at=? WHERE id=? AND user_id=?`).bind(next.status,next.entryTime,next.tp1Time,next.tp2Time,next.slTime,price,now,trade.id,user.id).run();
+      const updated=await env.DB.prepare("SELECT id,signal_id,timeframe,direction,status,entry,sl,tp1,tp2,confidence,signal_time,entry_time,tp1_time,tp2_time,sl_time,last_price,updated_at,created_at FROM trades WHERE id=? AND user_id=?").bind(trade.id,user.id).first();
+      return json({trade:updated});
+    }
+    return json({error:"Not found"},404);
+  }catch(error){
+    console.error("TRADES_ERROR",error);
+    return json({error:"Trade monitor server error.",detail:String(error?.message||error)},500);
+  }
+}
+
 async function adminRoute(req, env, path) {
   try {
     if (!env.DB) return json({error:"SNIPER XAUUSD database is not connected. Check the D1 binding named DB."},503);
@@ -549,6 +640,7 @@ export default {
       const url = new URL(request.url);
       if (url.pathname === "/api/health") return healthRoute(env);
       if (url.pathname.startsWith("/api/auth/")) return authRoute(request, env, url.pathname);
+      if (url.pathname === "/api/trades" || url.pathname === "/api/trades/sync") return tradesRoute(request, env, url.pathname);
       if (url.pathname.startsWith("/api/admin/")) return adminRoute(request, env, url.pathname);
       const api = await handleApi(request, env);
       if (api) return api;
