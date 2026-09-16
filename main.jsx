@@ -69,17 +69,18 @@ function TradeMonitor({trades=[]}){
 
 function DashboardApp({ user, onLogout }){
   const [data,setData]=useState(empty), [connected,setConnected]=useState(false), [tab,setTab]=useState("Dashboard"), [notif,setNotif]=useState(()=>"Notification" in window && Notification.permission==="granted"), [history,setHistory]=useState([]), [trades,setTrades]=useState([]), [timeframe,setTimeframe]=useState("M15"), [news,setNews]=useState({configured:false,events:[],source:"—",updatedAt:null,error:null});
-  const initialSignal=useRef(true), previousSignal=useRef("");
+  const initialSignal=useRef(true), previousSignal=useRef(""), previousTradeStatus=useRef(new Map());
+  const [tradeAlert,setTradeAlert]=useState(null);
   const latestSignal = history.find(x => x.status === "BUY" || x.status === "SELL") || null;
 
   async function loadMarket(tf=timeframe){ try { const r=await fetch(`/api/market/xauusd?granularity=${tf}&count=180`,{cache:"no-store"}); const j=await r.json(); setData(prev=>({...j, price:j.livePrice ?? j.price, candles:j.candles?.length ? j.candles : prev.candles})); setConnected(Boolean(j.configured)); await syncTrade(j); } catch { setConnected(false); } }
   async function loadNews(){ try { const r=await fetch("/api/news/calendar",{cache:"no-store"}); const j=await r.json(); setNews(j); } catch(e) { setNews({configured:false,events:[],source:"US macro calendar",error:e.message}); } }
-  async function loadTrades(){ try { const r=await fetch("/api/trades",{credentials:"include",cache:"no-store"}); const j=await r.json(); if(r.ok) setTrades(j.trades||[]); } catch {} }
+  async function loadTrades(){ try { const r=await fetch("/api/trades",{credentials:"include",cache:"no-store"}); const j=await r.json(); if(!r.ok) return; const next=j.trades||[]; if(previousTradeStatus.current.size){ for(const t of next){ const old=previousTradeStatus.current.get(t.id); const current=String(t.status||"").toUpperCase(); if(old && old!==current && ["TP1 HIT","TP2 HIT","SL HIT"].includes(current)){ const title=`${t.direction} ${current}`; setTradeAlert({id:`${t.id}-${current}`,title,price:t.last_price}); if(notif && "Notification" in window && Notification.permission==="granted") new Notification(`SNIPER XAUUSD · ${title}`,{body:`XAUUSD ${t.timeframe} · ${current} · Last ${fmt(t.last_price,2)}`}); if(navigator.vibrate) navigator.vibrate([180,80,180]); } } } for(const t of next) previousTradeStatus.current.set(t.id,String(t.status||"").toUpperCase()); setTrades(next); } catch {} }
   async function syncTrade(j){ try { if(!j?.signal || !["BUY","SELL"].includes(j.signal.status)) return; const r=await fetch("/api/trades/sync",{method:"POST",credentials:"include",headers:{"content-type":"application/json"},body:JSON.stringify({signal:j.signal,price:j.livePrice??j.price})}); const body=await r.json(); if(r.ok&&body.trade){ setTrades(prev=>[body.trade,...prev.filter(x=>x.id!==body.trade.id)].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,200)); } } catch {} }
 
   useEffect(()=>{ loadMarket(timeframe); const id=setInterval(()=>loadMarket(timeframe),15000); return()=>clearInterval(id); },[timeframe]);
   useEffect(()=>{ loadNews(); const id=setInterval(loadNews,300000); return()=>clearInterval(id); },[]);
-  useEffect(()=>{ try { const saved=JSON.parse(localStorage.getItem("aurex-history")||"[]"); if(Array.isArray(saved)) setHistory(saved); } catch {} loadTrades(); },[]);
+  useEffect(()=>{ try { const saved=JSON.parse(localStorage.getItem("aurex-history")||"[]"); if(Array.isArray(saved)) setHistory(saved); } catch {} loadTrades(); const id=setInterval(loadTrades,15000); return()=>clearInterval(id); },[notif]);
 
   useEffect(()=>{
     const sig=data.signal; if(!sig || !sig.id || sig.status==="WAITING") return;
@@ -122,7 +123,7 @@ function DashboardApp({ user, onLogout }){
     ,Admin:<AdminPanel user={user}/>
   }[tab];
 
-  return <div className="app"><aside><div className="brand"><div className="logo">A</div><div><strong>SNIPER XAUUSD</strong><small>GOLD SIGNAL INTELLIGENCE</small></div></div><nav>{nav.map(([n,I])=><button type="button" className={tab===n?"active":""} onClick={()=>setTab(n)} key={n}><I size={17}/>{n}</button>)}</nav><div className="side-note"><ShieldCheck size={16}/><span>No MT5 required<br/><small>Twelve Data → SNIPER engine</small></span></div></aside>
+  return <div className="app">{tradeAlert&&<button type="button" className="trade-alert" onClick={()=>setTradeAlert(null)}><span className="trade-alert-icon">✓</span><span><b>{tradeAlert.title}</b><small>XAUUSD · Last {fmt(tradeAlert.price,2)} · Tap to dismiss</small></span></button>}<aside><div className="brand"><div className="logo">A</div><div><strong>SNIPER XAUUSD</strong><small>GOLD SIGNAL INTELLIGENCE</small></div></div><nav>{nav.map(([n,I])=><button type="button" className={tab===n?"active":""} onClick={()=>setTab(n)} key={n}><I size={17}/>{n}</button>)}</nav><div className="side-note"><ShieldCheck size={16}/><span>No MT5 required<br/><small>Twelve Data → SNIPER engine</small></span></div></aside>
     <main><header><div><div className="eyebrow">MARKET INTELLIGENCE</div><h1>{tab}</h1></div><div className="header-actions"><div className={monitoring?"status live-status":"status"}><i/> {monitoring?"LIVE MONITORING ACTIVE":"FEED OFFLINE"}</div><span className="user-chip">{user?.email || "Member"}</span><button className="iconbtn" onClick={enablePush} title="Enable entry notifications"><Bell size={18}/></button><button className="logout-btn" onClick={onLogout}>Logout</button></div></header>{page}<footer><span>© SNIPER XAUUSD</span><span>Market data source: {data.source||"not connected"} · XAUUSD is OTC and quotes vary by provider.</span></footer></main>
     <div className="mobile-nav">{nav.map(([n,I])=><button type="button" className={tab===n?"active":""} onClick={()=>setTab(n)} key={n}><I size={18}/><span>{n.replace("AI Analysis","AI")}</span></button>)}</div>
   </div>;
