@@ -1,4 +1,4 @@
-# AUREX AI V7 — Member + Subscription + Admin
+# SNIPER XAUUSD V7 — Member + Subscription + Admin
 
 Standalone Cloudflare Worker + static assets. No MT5 and no AppDeploy.
 
@@ -13,7 +13,7 @@ Standalone Cloudflare Worker + static assets. No MT5 and no AppDeploy.
 - XAUUSD market data, signals, history, news and analysis
 
 ## Important: existing D1 schema
-This V7 matches the D1 schema used by the current AUREX database:
+This V7 matches the D1 schema used by the current SNIPER XAUUSD database:
 - `users.id` is INTEGER AUTOINCREMENT
 - `subscription_status`
 - `subscription_plan`

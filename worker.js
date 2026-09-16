@@ -68,7 +68,7 @@ function buildSignal(candles, timeframe) {
   const e20 = ema(closes, 20), e50 = ema(closes, 50), r = rsi(closes), a = atr(basis), m = macd(closes);
   const bullish = e20 > e50 && last > e20 && r != null && r >= 52 && r <= 72 && m > 0;
   const bearish = e20 < e50 && last < e20 && r != null && r >= 28 && r <= 48 && m < 0;
-  if (!bullish && !bearish) return { ...base, id: `${timeframe}-${candleTime || "none"}-WAITING`, status: "WAITING", title: "No Confirmed Setup", note: `The completed ${timeframe} candle does not meet every confirmation filter. AUREX stays out instead of forcing a trade.`, confidence: 0, entry: null, sl: null, tp1: null, tp2: null };
+  if (!bullish && !bearish) return { ...base, id: `${timeframe}-${candleTime || "none"}-WAITING`, status: "WAITING", title: "No Confirmed Setup", note: `The completed ${timeframe} candle does not meet every confirmation filter. SNIPER XAUUSD stays out instead of forcing a trade.`, confidence: 0, entry: null, sl: null, tp1: null, tp2: null };
 
   const risk = Math.max((a || 1) * 1.25, 0.8);
   const entry = last;
@@ -123,10 +123,7 @@ async function marketResponse(env, granularity, count) {
   if (!env.TWELVE_DATA_API_KEY) return empty("Twelve Data API key is not configured in Cloudflare.");
   const intervalMap = { M1: "1min", M5: "5min", M15: "15min", M30: "30min", H1: "1h" };
   const interval = intervalMap[granularity] || "15min";
-  const [body, priceBody] = await Promise.all([
-  getTimeSeries(env, interval, count),
-  getPrice(env).catch(() => ({ price: null }))
-]);
+  const [body, priceBody] = await Promise.all([getTimeSeries(env, interval, count), getPrice(env)]);
   const candles = (body.values || []).slice().reverse().map(c => ({
     time: c.datetime, open: Number(c.open), high: Number(c.high), low: Number(c.low), close: Number(c.close),
   })).filter(c => Number.isFinite(c.close));
@@ -180,7 +177,7 @@ async function handleApi(request, env) {
     const granularity = (url.searchParams.get("granularity") || "M15").toUpperCase();
     const count = Math.min(Math.max(Number(url.searchParams.get("count") || 180), 60), 5000);
     const cache = caches.default;
-    const cacheKey = new Request(`${url.origin}/__aurex_cache/xauusd?granularity=${granularity}&count=${count}`);
+    const cacheKey = new Request(`${url.origin}/__sniper_cache/xauusd?granularity=${granularity}&count=${count}`);
     const cached = await cache.match(cacheKey);
     if (cached) return cached;
     try {
@@ -195,7 +192,7 @@ async function handleApi(request, env) {
 
   if (url.pathname === "/api/news/calendar") {
     const cache = caches.default;
-    const cacheKey = new Request(`${url.origin}/__aurex_cache/news/high`);
+    const cacheKey = new Request(`${url.origin}/__sniper_cache/news/high`);
     const cached = await cache.match(cacheKey);
     if (cached) return cached;
     try {
@@ -211,18 +208,18 @@ async function handleApi(request, env) {
 }
 
 
-const SESSION_COOKIE = "aurex_session";
+const SESSION_COOKIE = "sniper_session";
 const SESSION_DAYS = 30;
 const enc = new TextEncoder();
 function uuid(){return crypto.randomUUID()}
 function cookie(name,value,maxAge){return `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax`}
-async function hashPassword(password,salt){const key=await crypto.subtle.importKey("raw",enc.encode(password),"PBKDF2",false,["deriveBits"]);const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt:enc.encode(salt),iterations:100000,hash:"SHA-256"},key,256);return `${salt}.${[...new Uint8Array(bits)].map(x=>x.toString(16).padStart(2,"0")).join("")}`}
+async function hashPassword(password,salt){const key=await crypto.subtle.importKey("raw",enc.encode(password),"PBKDF2",false,["deriveBits"]);const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt:enc.encode(salt),iterations:120000,hash:"SHA-256"},key,256);return `${salt}.${[...new Uint8Array(bits)].map(x=>x.toString(16).padStart(2,"0")).join("")}`}
 async function makePasswordHash(password){return hashPassword(password,uuid())}
 async function verifyPassword(password,stored){const [salt,digest]=String(stored||"").split(".");if(!salt||!digest)return false;const h=await hashPassword(password,salt);return h===stored}
 function getCookie(req,name){const raw=req.headers.get("cookie")||"";return raw.split(";").map(x=>x.trim()).find(x=>x.startsWith(name+"="))?.slice(name.length+1)||null}
 async function currentUser(req,env){if(!env.DB)return null;const sid=getCookie(req,SESSION_COOKIE);if(!sid)return null;const row=await env.DB.prepare("SELECT u.id,u.name,u.email,u.role,u.subscription_status,u.subscription_plan,u.subscription_expires_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>? LIMIT 1").bind(sid,new Date().toISOString()).first();if(!row)return null;const active=String(row.subscription_status||"").toLowerCase()==="active"&&(!row.subscription_expires_at||row.subscription_expires_at>new Date().toISOString());return {...row,subscriptionActive:row.role==="admin"?true:active}}
 async function authRoute(req,env,path){
- if(!env.DB)return json({error:"AUREX database is not connected yet. Create/bind the D1 database first."},503);
+ if(!env.DB)return json({error:"SNIPER XAUUSD database is not connected yet. Create/bind the D1 database first."},503);
  if(path==="/api/auth/me"){const user=await currentUser(req,env);return user?json({user}):json({user:null},401)}
  if(path==="/api/auth/logout"){const sid=getCookie(req,SESSION_COOKIE);if(sid)await env.DB.prepare("DELETE FROM sessions WHERE id=?").bind(sid).run();return json({ok:true},200,{"set-cookie":cookie(SESSION_COOKIE,"",0)})}
  if(req.method!=="POST")return json({error:"Method not allowed"},405);
