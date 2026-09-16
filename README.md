@@ -27,3 +27,6 @@ The site will receive a `pages.dev` URL. A custom domain can be connected later.
 - XAUUSD is an OTC/spot instrument; the exact quote depends on the selected provider.
 - The signal engine is a strict technical prototype, not a promise of profitability.
 - Browser notification permission must be granted by the user. For reliable mobile push after the browser is closed, a Web Push service worker/backend should be added in the next step.
+
+## Cloudflare Workers deployment
+This project uses a Cloudflare Worker with static assets. `wrangler.jsonc` points the Worker entry to `worker.js` and the built frontend to `dist/`. The `/api/market/xauusd` route runs server-side so Cloudflare Worker Secrets can provide `OANDA_API_TOKEN`.
