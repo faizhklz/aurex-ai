@@ -61,20 +61,30 @@ function buildSignal(candles, timeframe) {
   const updated = new Date().toISOString();
   const candleTime = basisCandle?.time || null;
   const base = { timeframe, setup: "STRICT FILTER", rr: "1 : 2", updated, candleTime };
-  if (basis.length < 60) return { ...base, id: `${timeframe}-${candleTime || "none"}-WAITING`, status: "WAITING", title: "Waiting for Live Confirmation", note: `Not enough ${timeframe} completed candles for the strict filter.`, confidence: 0, entry: null, sl: null, tp1: null, tp2: null };
-
+  if (basis.length < 60) return {
+  ...base,
+  id: "...",
+  status: "WAITING",
+  ...
+  entry: null,
+  sl: null,
+  tp1: null,
+  tp2: null,
+  tp3: null
+};
   const closes = basis.map(c => c.close);
   const last = closes.at(-1);
   const e20 = ema(closes, 20), e50 = ema(closes, 50), r = rsi(closes), a = atr(basis), m = macd(closes);
   const bullish = e20 > e50 && last > e20 && r != null && r >= 52 && r <= 72 && m > 0;
   const bearish = e20 < e50 && last < e20 && r != null && r >= 28 && r <= 48 && m < 0;
-  if (!bullish && !bearish) return { ...base, id: `${timeframe}-${candleTime || "none"}-WAITING`, status: "WAITING", title: "No Confirmed Setup", note: `The completed ${timeframe} candle does not meet every confirmation filter. AUREX stays out instead of forcing a trade.`, confidence: 0, entry: null, sl: null, tp1: null, tp2: null };
+  if (!bullish && !bearish) return { ...base, id: `${timeframe}-${candleTime || "none"}-WAITING`, status: "WAITING", title: "No Confirmed Setup", note: `The completed ${timeframe} candle does not meet every confirmation filter. AUREX stays out instead of forcing a trade.`, confidence: 0, entry: null, sl: null, tp1: null, tp2: null, tp3: null
 
   const risk = Math.max((a || 1) * 1.25, 0.8);
   const entry = last;
   const sl = bullish ? entry - risk : entry + risk;
   const tp1 = bullish ? entry + risk * 1.5 : entry - risk * 1.5;
   const tp2 = bullish ? entry + risk * 2 : entry - risk * 2;
+  const tp3 = bullish ? entry + risk * 2.75 : entry - risk * 2.75;
   const confidence = Math.min(95, 72 + Math.round(Math.abs(r - 50)));
   const status = bullish ? "BUY" : "SELL";
   return {
@@ -84,7 +94,7 @@ function buildSignal(candles, timeframe) {
     title: bullish ? "Bullish Confirmation" : "Bearish Confirmation",
     note: `${timeframe} completed-candle trend, momentum and volatility filters aligned. Informational signal — not a guarantee.`,
     confidence,
-    entry, sl, tp1, tp2,
+    entry, sl, tp1, tp2, tp3,
   };
 }
 
