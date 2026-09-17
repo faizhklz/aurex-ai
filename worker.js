@@ -55,157 +55,175 @@ function macd(values) {
   return e12 == null || e26 == null ? null : e12 - e26;
 }
 
-function buildSignal(candles, timeframe, livePrice = null) {
+function buildSignal(candles, timeframe) {
   const basis = candles.length > 1 ? candles.slice(0, -1) : candles;
   const basisCandle = basis.at(-1);
   const updated = new Date().toISOString();
   const candleTime = basisCandle?.time || null;
+  const base = { timeframe, setup: "STRICT FILTER", rr: "1 : 2", updated, candleTime };
 
-  const base = {
-    timeframe,
-    setup: "STRICT FILTER",
-    rr: "1 : 2",
-    updated,
-    candleTime
+  if (basis.length < 60) return {
+    ...base,
+    id: `${timeframe}-${candleTime || "none"}-WAITING`,
+    status: "WAITING",
+    signalStatus: "WAITING",
+    title: "Waiting for Live Confirmation",
+    note: `Not enough ${timeframe} completed candles for the strict filter.`,
+    confidence: 0,
+    entry: null, sl: null, tp1: null, tp2: null, tp3: null,
   };
-
-  if (basis.length < 60) {
-    return {
-      ...base,
-      id: `${timeframe}-${candleTime || "none"}-WAITING`,
-      status: "WAITING",
-      signalStatus: "WAITING",
-      title: "Waiting for Live Confirmation",
-      note: `Not enough ${timeframe} completed candles for the strict filter.`,
-      confidence: 0,
-      entry: null,
-      sl: null,
-      tp1: null,
-      tp2: null,
-      tp3: null
-    };
-  }
 
   const closes = basis.map(c => c.close);
   const last = closes.at(-1);
+  const e20 = ema(closes, 20), e50 = ema(closes, 50), r = rsi(closes), a = atr(basis), m = macd(closes);
+  const bullish = e20 > e50 && last > e20 && r != null && r >= 52 && r <= 72 && m > 0;
+  const bearish = e20 < e50 && last < e20 && r != null && r >= 28 && r <= 48 && m < 0;
 
-  const e20 = ema(closes, 20);
-  const e50 = ema(closes, 50);
-  const r = rsi(closes);
-  const a = atr(basis);
-  const m = macd(closes);
-
-  const bullish =
-    e20 > e50 &&
-    last > e20 &&
-    r != null &&
-    r >= 52 &&
-    r <= 72 &&
-    m > 0;
-
-  const bearish =
-    e20 < e50 &&
-    last < e20 &&
-    r != null &&
-    r >= 28 &&
-    r <= 48 &&
-    m < 0;
-
-  if (!bullish && !bearish) {
-    return {
-      ...base,
-      id: `${timeframe}-${candleTime || "none"}-WAITING`,
-      status: "WAITING",
-      signalStatus: "WAITING",
-      title: "No Confirmed Setup",
-      note: `The completed ${timeframe} candle does not meet every confirmation filter. AUREX stays out instead of forcing a trade.`,
-      confidence: 0,
-      entry: null,
-      sl: null,
-      tp1: null,
-      tp2: null,
-      tp3: null
-    };
-  }
+  if (!bullish && !bearish) return {
+    ...base,
+    id: `${timeframe}-${candleTime || "none"}-WAITING`,
+    status: "WAITING",
+    signalStatus: "WAITING",
+    title: "No Confirmed Setup",
+    note: `The completed ${timeframe} candle does not meet every confirmation filter. SNIPER XAUUSD stays out instead of forcing a trade.`,
+    confidence: 0,
+    entry: null, sl: null, tp1: null, tp2: null, tp3: null,
+  };
 
   const risk = Math.max((a || 1) * 1.25, 0.8);
-
   const entry = last;
   const sl = bullish ? entry - risk : entry + risk;
   const tp1 = bullish ? entry + risk * 1.5 : entry - risk * 1.5;
   const tp2 = bullish ? entry + risk * 2 : entry - risk * 2;
   const tp3 = bullish ? entry + risk * 2.75 : entry - risk * 2.75;
-
-  const confidence = Math.min(
-    95,
-    72 + Math.round(Math.abs(r - 50))
-  );
-
+  const confidence = Math.min(95, 72 + Math.round(Math.abs(r - 50)));
   const direction = bullish ? "BUY" : "SELL";
-
-  let signalStatus = "ACTIVE";
-
-  const p = Number(livePrice);
-
-  if (Number.isFinite(p)) {
-    if (bullish) {
-      if (p <= sl) {
-        signalStatus = "SL HIT";
-      } else if (p >= tp3) {
-        signalStatus = "TP3 HIT";
-      } else if (p >= tp2) {
-        signalStatus = "TP2 HIT";
-      } else if (p >= tp1) {
-        signalStatus = "TP1 HIT";
-      }
-    }
-
-    if (bearish) {
-      if (p >= sl) {
-        signalStatus = "SL HIT";
-      } else if (p <= tp3) {
-        signalStatus = "TP3 HIT";
-      } else if (p <= tp2) {
-        signalStatus = "TP2 HIT";
-      } else if (p <= tp1) {
-        signalStatus = "TP1 HIT";
-      }
-    }
-  }
-
-  const title =
-    signalStatus === "ACTIVE"
-      ? bullish
-        ? "Bullish Confirmation"
-        : "Bearish Confirmation"
-      : `${signalStatus} — ${direction}`;
 
   return {
     ...base,
     id: `${timeframe}-${candleTime}-${direction}`,
     status: direction,
-    signalStatus,
-    title,
-    note:
-      signalStatus === "ACTIVE"
-        ? `${timeframe} completed-candle trend, momentum and volatility filters aligned. Informational signal — not a guarantee.`
-        : `${direction} signal status updated from the live XAUUSD price.`,
+    signalStatus: "ACTIVE",
+    title: bullish ? "Bullish Confirmation" : "Bearish Confirmation",
+    note: `${timeframe} completed-candle trend, momentum and volatility filters aligned. Informational signal — not a guarantee.`,
     confidence,
-    entry,
-    sl,
-    tp1,
-    tp2,
-    tp3
+    entry, sl, tp1, tp2, tp3,
   };
 }
 
-function empty(reason = "Connect the live XAUUSD provider to activate market detection.") {
-  return {
-    configured: false, source: "Twelve Data", instrument: "XAUUSD", symbol: DEFAULT_SYMBOL,
-    price: null, bid: null, ask: null, time: null, candles: [], livePrice: null,
-    signal: { id: "offline", status: "WAITING", title: "Waiting for Live Confirmation", note: reason, confidence: 0, entry: null, sl: null, tp1: null, tp2: null, rr: "1 : 2", timeframe: "M15", setup: "STRICT FILTER", updated: new Date().toISOString(), candleTime: null },
-    indicators: {},
-  };
+const TERMINAL_RESULTS = new Set(["TP3 HIT", "SL HIT"]);
+const RESULT_RANK = { ACTIVE: 0, "TP1 HIT": 1, "TP2 HIT": 2, "TP3 HIT": 3, "SL HIT": 99 };
+
+function nextResult(lock, livePrice) {
+  const current = lock.result || "ACTIVE";
+  if (TERMINAL_RESULTS.has(current)) return current;
+  const p = Number(livePrice);
+  if (!Number.isFinite(p)) return current;
+
+  let reached = "ACTIVE";
+  if (lock.direction === "BUY") {
+    if (p <= lock.sl) return "SL HIT";
+    if (p >= lock.tp3) reached = "TP3 HIT";
+    else if (p >= lock.tp2) reached = "TP2 HIT";
+    else if (p >= lock.tp1) reached = "TP1 HIT";
+  } else {
+    if (p >= lock.sl) return "SL HIT";
+    if (p <= lock.tp3) reached = "TP3 HIT";
+    else if (p <= lock.tp2) reached = "TP2 HIT";
+    else if (p <= lock.tp1) reached = "TP1 HIT";
+  }
+
+  return RESULT_RANK[reached] >= RESULT_RANK[current] ? reached : current;
+}
+
+async function ensureSignalLockTable(env) {
+  if (!env.DB) return;
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS signal_locks (
+    timeframe TEXT PRIMARY KEY,
+    signal_id TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    title TEXT,
+    note TEXT,
+    confidence INTEGER,
+    entry REAL,
+    sl REAL,
+    tp1 REAL,
+    tp2 REAL,
+    tp3 REAL,
+    candle_time TEXT,
+    result TEXT NOT NULL DEFAULT 'ACTIVE',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`).run();
+}
+
+async function getLockedSignal(env, timeframe, rawSignal, livePrice) {
+  if (!env.DB) return rawSignal;
+
+  await ensureSignalLockTable(env);
+  const existing = await env.DB.prepare(`SELECT * FROM signal_locks WHERE timeframe=? LIMIT 1`).bind(timeframe).first();
+
+  if (existing && !TERMINAL_RESULTS.has(existing.result)) {
+    const result = nextResult(existing, livePrice);
+    if (result !== existing.result) {
+      await env.DB.prepare(`UPDATE signal_locks SET result=?, updated_at=? WHERE timeframe=?`).bind(result, new Date().toISOString(), timeframe).run();
+      existing.result = result;
+      existing.updated_at = new Date().toISOString();
+    }
+    return {
+      timeframe: existing.timeframe,
+      setup: "STRICT FILTER",
+      rr: "1 : 2",
+      updated: existing.updated_at,
+      candleTime: existing.candle_time,
+      id: existing.signal_id,
+      status: existing.direction,
+      signalStatus: existing.result,
+      title: existing.title,
+      note: existing.note,
+      confidence: existing.confidence,
+      entry: existing.entry,
+      sl: existing.sl,
+      tp1: existing.tp1,
+      tp2: existing.tp2,
+      tp3: existing.tp3,
+    };
+  }
+
+  if (existing && TERMINAL_RESULTS.has(existing.result)) {
+    if (!(rawSignal && (rawSignal.status === "BUY" || rawSignal.status === "SELL") && rawSignal.id !== existing.signal_id)) {
+      return {
+        timeframe: existing.timeframe,
+        setup: "STRICT FILTER",
+        rr: "1 : 2",
+        updated: existing.updated_at,
+        candleTime: existing.candle_time,
+        id: existing.signal_id,
+        status: existing.direction,
+        signalStatus: existing.result,
+        title: existing.title,
+        note: existing.note,
+        confidence: existing.confidence,
+        entry: existing.entry,
+        sl: existing.sl,
+        tp1: existing.tp1,
+        tp2: existing.tp2,
+        tp3: existing.tp3,
+      };
+    }
+  }
+
+  if (!rawSignal || (rawSignal.status !== "BUY" && rawSignal.status !== "SELL")) return rawSignal;
+
+  const now = new Date().toISOString();
+  const initialLock = { ...rawSignal, signalStatus: nextResult({ ...rawSignal, direction: rawSignal.status, result: "ACTIVE" }, livePrice) };
+  await env.DB.prepare(`INSERT OR REPLACE INTO signal_locks
+    (timeframe,signal_id,direction,title,note,confidence,entry,sl,tp1,tp2,tp3,candle_time,result,created_at,updated_at)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .bind(timeframe, rawSignal.id, rawSignal.status, rawSignal.title, rawSignal.note, rawSignal.confidence,
+      rawSignal.entry, rawSignal.sl, rawSignal.tp1, rawSignal.tp2, rawSignal.tp3, rawSignal.candleTime, initialLock.signalStatus, now, now).run();
+
+  return initialLock;
 }
 
 async function tdFetch(env, endpoint, params) {
@@ -252,7 +270,7 @@ async function marketResponse(env, granularity, count) {
     ask: null,
     time: new Date().toISOString(),
     candles,
-    signal: buildSignal(candles, granularity, livePrice),
+    signal: await getLockedSignal(env, granularity, buildSignal(candles, granularity), livePrice),
     indicators: { ema20: ema(closes, 20), ema50: ema(closes, 50), rsi: rsi(closes), atr: atr(candles), macd: macd(closes) },
   };
 }
@@ -330,7 +348,7 @@ async function verifyPassword(password,stored){const [salt,digest]=String(stored
 function getCookie(req,name){const raw=req.headers.get("cookie")||"";return raw.split(";").map(x=>x.trim()).find(x=>x.startsWith(name+"="))?.slice(name.length+1)||null}
 async function currentUser(req,env){if(!env.DB)return null;const sid=getCookie(req,SESSION_COOKIE);if(!sid)return null;const row=await env.DB.prepare("SELECT u.id,u.name,u.email,u.role,u.subscription_status,u.subscription_plan,u.subscription_expires_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=? AND s.expires_at>? LIMIT 1").bind(sid,new Date().toISOString()).first();if(!row)return null;const active=String(row.subscription_status||"").toLowerCase()==="active"&&(!row.subscription_expires_at||row.subscription_expires_at>new Date().toISOString());return {...row,subscriptionActive:row.role==="admin"?true:active}}
 async function authRoute(req,env,path){
- if(!env.DB)return json({error:"AUREX database is not connected yet. Create/bind the D1 database first."},503);
+ if(!env.DB)return json({error:"SNIPER XAUUSD database is not connected yet. Create/bind the D1 database first."},503);
  if(path==="/api/auth/me"){const user=await currentUser(req,env);return user?json({user}):json({user:null},401)}
  if(path==="/api/auth/logout"){const sid=getCookie(req,SESSION_COOKIE);if(sid)await env.DB.prepare("DELETE FROM sessions WHERE id=?").bind(sid).run();return json({ok:true},200,{"set-cookie":cookie(SESSION_COOKIE,"",0)})}
  if(req.method!=="POST")return json({error:"Method not allowed"},405);
