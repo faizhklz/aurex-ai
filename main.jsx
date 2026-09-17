@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Activity, Bell, CandlestickChart, Clock3, History as HistoryIcon, LayoutDashboard, Newspaper, ShieldCheck, Sparkles, Target, TrendingUp, WalletCards, Users, Crown } from "lucide-react";
@@ -27,8 +26,13 @@ function PanelHead({title,subtitle,icon:Icon=Activity}) { return <div className=
 function SignalCard({s, large=false}) {
   const direction = s.status || "WAITING";
   const result = s.signalStatus || (direction === "BUY" || direction === "SELL" ? "ACTIVE" : "WAITING");
+  const locked = direction === "BUY" || direction === "SELL";
   return <div className={"signal "+(direction==="BUY"?"buy":direction==="SELL"?"sell":"wait")+(large?" large":"")}>
-    <div className="signal-top"><span className="pill">{direction} · {result}</span><strong>{s.title}</strong></div><p>{s.note}</p>
+    <div className="signal-top">
+      <div className="signal-top-left"><span className="pill">{direction} · {result}</span>{locked && <span className="lock-badge">LOCKED</span>}</div>
+      <strong>{s.title}</strong>
+    </div>
+    <p>{s.note}</p>
     <div className="signal-grid">
       <Metric label="ENTRY" value={fmt(s.entry,2)}/>
       <Metric label="STOP LOSS" value={fmt(s.sl,2)}/>
@@ -40,10 +44,19 @@ function SignalCard({s, large=false}) {
     </div>
   </div>;
 }
-function LatestSignal({signal}) { return <div className="latest-signal"><div><span>LATEST CONFIRMED SIGNAL</span><b className={signal.status.toLowerCase()}>{signal.status} · {signal.timeframe}</b></div><div><small>ENTRY</small><strong>{fmt(signal.entry,2)}</strong></div><div><small>TIME</small><strong>{signal.candleTime?new Date(signal.candleTime).toLocaleTimeString():"—"}</strong></div><div><small>SL / TP1</small><strong>{fmt(signal.sl,2)} / {fmt(signal.tp1,2)}</strong></div></div>; }
+function LatestSignal({signal}) {
+  const result = signal.signalStatus || "ACTIVE";
+  return <div className="latest-signal">
+    <div><span>LATEST SIGNAL</span><b className={signal.status.toLowerCase()}>{signal.status} · {signal.timeframe}</b></div>
+    <div><small>RESULT</small><strong>{result}</strong></div>
+    <div><small>ENTRY 🔒</small><strong>{fmt(signal.entry,2)}</strong></div>
+    <div><small>TIME</small><strong>{signal.candleTime?new Date(signal.candleTime).toLocaleTimeString():"—"}</strong></div>
+    <div><small>SL / TP1</small><strong>{fmt(signal.sl,2)} / {fmt(signal.tp1,2)}</strong></div>
+  </div>;
+}
 
 function DashboardApp({ user, onLogout }){
-  const [data,setData]=useState(empty), [connected,setConnected]=useState(false), [tab,setTab]=useState("Dashboard"), [notif,setNotif]=useState(()=>"Notification" in window && Notification.permission==="granted"), [history,setHistory]=useState([]), [timeframe,setTimeframe]=useState("M15"), [news,setNews]=useState({configured:false,events:[],source:"—",updatedAt:null,error:null});
+  const [data,setData]=useState(empty), [connected,setConnected]=useState(false), [tab,setTab]=useState("Dashboard"), [notif,setNotif]=useState(()=>"Notification" in window && Notification.permission==="granted"), [history,setHistory]=useState([]), [historyFilter,setHistoryFilter]=useState("ALL"), [timeframe,setTimeframe]=useState("M15"), [news,setNews]=useState({configured:false,events:[],source:"—",updatedAt:null,error:null});
   const initialSignal=useRef(true), previousSignal=useRef("");
   const latestSignal = history.find(x => x.status === "BUY" || x.status === "SELL") || null;
 
@@ -52,7 +65,7 @@ function DashboardApp({ user, onLogout }){
 
   useEffect(()=>{ loadMarket(timeframe); const id=setInterval(()=>loadMarket(timeframe),15000); return()=>clearInterval(id); },[timeframe]);
   useEffect(()=>{ loadNews(); const id=setInterval(loadNews,300000); return()=>clearInterval(id); },[]);
-  useEffect(()=>{ try { const saved=JSON.parse(localStorage.getItem("SNIPER XAUUSD-history")||"[]"); if(Array.isArray(saved)) setHistory(saved); } catch {} },[]);
+  useEffect(()=>{ try { const saved=JSON.parse(localStorage.getItem("sniper-xauusd-history") || localStorage.getItem("SNIPER XAUUSD-history") || localStorage.getItem("aurex-history") || "[]"); if(Array.isArray(saved)) setHistory(saved); } catch {} },[]);
 
   useEffect(()=>{
     const sig=data.signal;
@@ -96,7 +109,7 @@ function DashboardApp({ user, onLogout }){
         : [record,...prev];
 
       const trimmed=next.slice(0,100);
-      localStorage.setItem("SNIPER XAUUSD-history",JSON.stringify(trimmed));
+      localStorage.setItem("sniper-xauusd-history",JSON.stringify(trimmed));
       return trimmed;
     });
   },[data.signal,notif]);
@@ -108,6 +121,20 @@ function DashboardApp({ user, onLogout }){
   const analysis=useMemo(()=>{ const e20=Number(ind.ema20),e50=Number(ind.ema50),r=Number(ind.rsi),a=Number(ind.atr); return {trend:e20>e50?"Bullish structure":e20<e50?"Bearish structure":"Mixed structure",momentum:r>=52?"Positive momentum":r<=48?"Negative momentum":"Balanced momentum",volatility:a?`ATR ${fmt(a,2)} on ${timeframe}`:"Waiting for ATR",pricePosition:data.price&&e20?(data.price>e20?"Price above EMA20":"Price below EMA20"):"Waiting for price"}; },[ind,data.price,timeframe]);
   const monitoring=connected;
   const upcoming=(news.events||[]).slice(0,12);
+  const historyStats=useMemo(()=>({
+    total:history.length,
+    active:history.filter(x=>(x.result||"ACTIVE")==="ACTIVE").length,
+    tp:history.filter(x=>String(x.result||"").startsWith("TP")).length,
+    sl:history.filter(x=>x.result==="SL HIT").length
+  }),[history]);
+  const visibleHistory=useMemo(()=>history.filter(x=>{
+    const result=x.result||"ACTIVE";
+    if(historyFilter==="ALL") return true;
+    if(historyFilter==="BUY" || historyFilter==="SELL") return x.status===historyFilter;
+    if(historyFilter==="TP") return result.startsWith("TP");
+    if(historyFilter==="SL") return result==="SL HIT";
+    return result===historyFilter;
+  }),[history,historyFilter]);
 
   const page={
     Dashboard:<>
@@ -119,14 +146,31 @@ function DashboardApp({ user, onLogout }){
       <section className="lower"><div className="panel"><PanelHead title="Detection Logic" subtitle="Signal only when completed-candle filters align" icon={Sparkles}/><div className="logic"><span>{timeframe} trend</span><span>EMA structure</span><span>RSI</span><span>MACD</span><span>Volatility</span><span>Market structure</span></div></div><div className="panel"><PanelHead title="Alerts" subtitle={notif?"Browser entry alerts armed":"Turn on entry alerts"} icon={Bell}/><button className="primary" onClick={enablePush}>{notif?"Notifications Enabled":"Enable Entry Notifications"}</button></div></section>
     </>,
     Signals:<section className="page-stack"><div className="page-intro"><div><span className="muted">SIGNAL CENTER</span><h2>Trade Signals</h2><p>Each timeframe has its own live setup and latest confirmed entry.</p></div><div className="bias-card"><span>MARKET BIAS</span><b className={s.status.toLowerCase()}>{bias}</b></div></div><div className="panel timeframe-panel"><TimeframeBar timeframe={timeframe} onTimeframe={setTimeframe}/></div><div className="signal-page-grid"><div className="panel"><PanelHead title="Current Setup" subtitle={`Live ${timeframe} XAUUSD feed`} icon={Target}/><SignalCard s={s} large/>{latestSignal&&<LatestSignal signal={latestSignal}/>}</div><div className="panel"><PanelHead title={`${timeframe} Indicators`} subtitle="Current technical readings"/><div className="stats-list"><Metric label="PRICE" value={fmt(data.price,2)}/><Metric label="EMA20" value={fmt(ind.ema20,2)}/><Metric label="EMA50" value={fmt(ind.ema50,2)}/><Metric label="RSI" value={fmt(ind.rsi,1)}/><Metric label="ATR" value={fmt(ind.atr,2)}/><Metric label="SOURCE" value={data.source||"—"}/></div></div></div></section>,
-    History:<section className="page-stack"><div className="page-intro"><div><span className="muted">SIGNAL LOG</span><h2>Signal History</h2><p>Only confirmed BUY/SELL entries are recorded.</p></div><div className="history-count"><b>{history.length}</b><span>records</span></div></div><div className="panel table-panel">{history.length?<table><thead><tr><th>TIME</th><th>TF</th><th>SIGNAL</th><th>RESULT</th><th>ENTRY</th><th>SL</th><th>TP1</th><th>TP2</th><th>TP3</th></tr></thead><tbody>{history.map(x=><tr key={x.key}><td>{new Date(x.time).toLocaleTimeString()}</td><td>{x.timeframe}</td><td><span className={"table-pill "+x.status.toLowerCase()}>{x.status}</span></td><td><span className={"table-pill "+String(x.result||"ACTIVE").toLowerCase().replaceAll(" ","-")}>{x.result||"ACTIVE"}</span></td><td>{fmt(x.entry,2)}</td><td>{fmt(x.sl,2)}</td><td>{fmt(x.tp1,2)}</td><td>{fmt(x.tp2,2)}</td><td>{fmt(x.tp3,2)}</td></tr>)}</tbody></table>:<div className="empty-page"><HistoryIcon size={34}/><b>No confirmed signals recorded yet</b><span>SNIPER XAUUSD will record a new entry when a timeframe confirms a setup.</span></div>}</div></section>,
+    History:<section className="page-stack">
+      <div className="page-intro">
+        <div><span className="muted">SIGNAL LOG</span><h2>Signal History</h2><p>Locked entries stay unchanged until TP3 or SL closes the trade.</p></div>
+        <div className="history-count"><b>{historyStats.total}</b><span>records</span></div>
+      </div>
+      <div className="history-summary-grid">
+        <div className="history-summary-card"><span>TOTAL</span><b>{historyStats.total}</b><small>tracked signals</small></div>
+        <div className="history-summary-card"><span>ACTIVE</span><b>{historyStats.active}</b><small>currently open</small></div>
+        <div className="history-summary-card"><span>TP HIT</span><b>{historyStats.tp}</b><small>TP1 / TP2 / TP3</small></div>
+        <div className="history-summary-card"><span>SL HIT</span><b>{historyStats.sl}</b><small>closed at stop</small></div>
+      </div>
+      <div className="history-filters">
+        {["ALL","BUY","SELL","ACTIVE","TP","SL"].map(f=><button key={f} type="button" className={historyFilter===f?"selected":""} onClick={()=>setHistoryFilter(f)}>{f}</button>)}
+      </div>
+      <div className="panel table-panel history-table-panel">
+        {visibleHistory.length?<div className="history-table-scroll"><table><thead><tr><th>TIME</th><th>TF</th><th>SIGNAL</th><th>RESULT</th><th>ENTRY 🔒</th><th>SL</th><th>TP1</th><th>TP2</th><th>TP3</th></tr></thead><tbody>{visibleHistory.map(x=>{ const result=x.result||"ACTIVE"; const resultClass=result.toLowerCase().replaceAll(" ","-"); return <tr key={x.key}><td>{new Date(x.time).toLocaleTimeString()}</td><td><span className="tf-badge">{x.timeframe}</span></td><td><span className={"table-pill "+x.status.toLowerCase()}>{x.status}</span></td><td><span className={"result-pill "+resultClass}>{result}</span></td><td><b>{fmt(x.entry,2)}</b></td><td>{fmt(x.sl,2)}</td><td>{fmt(x.tp1,2)}</td><td>{fmt(x.tp2,2)}</td><td>{fmt(x.tp3,2)}</td></tr>})}</tbody></table></div>:<div className="empty-page"><HistoryIcon size={34}/><b>No matching signals</b><span>Try another history filter.</span></div>}
+      </div>
+    </section>,
     News:<section className="page-stack"><div className="page-intro"><div><span className="muted">LIVE MACRO CALENDAR</span><h2>Gold Market News</h2><p>High-impact US macro releases relevant to XAUUSD.</p></div><div className={news.configured?"news-status live-news":"news-status"}><span className="dot"/> {news.configured?"LIVE CALENDAR":"CALENDAR OFFLINE"}</div></div><div className="news-grid">{upcoming.length?upcoming.map(e=><div className="panel news-event" key={e.id}><div className="event-top"><span className="tag">{e.impact}</span><small>{e.country}</small></div><h3>{e.title}</h3><div className="event-time">{e.date||"—"} · {e.time||"time TBA"}</div><div className="event-values"><span><small>PREVIOUS</small><b>{e.previous??"—"}</b></span><span><small>FORECAST</small><b>{e.forecast??"—"}</b></span><span><small>ACTUAL</small><b>{e.actual??"—"}</b></span></div></div>):<div className="panel notice-panel"><ShieldCheck size={18}/><div><b>{news.error?"Live calendar connection failed":"No high-impact events returned"}</b><span>{news.error||"The calendar provider returned no high-impact events right now."}</span></div></div>}</div><div className="panel notice-panel"><ShieldCheck size={18}/><div><b>Calendar source: {news.source||"—"}</b><span>Events are informational. Release times and values can change; always verify against the official release.</span></div></div></section>,
     "AI Analysis":<section className="page-stack"><div className="page-intro"><div><span className="muted">SNIPER XAUUSD INTELLIGENCE</span><h2>AI Market Analysis</h2><p>Readable technical context from the selected live timeframe.</p></div><div className="analysis-badge"><Sparkles size={15}/> {timeframe}</div></div><div className="analysis-grid"><div className="panel analysis-main"><PanelHead title="Current Market Read" subtitle="Technical context — not a guarantee" icon={Sparkles}/><div className="analysis-hero"><div><span>BIAS</span><b className={s.status.toLowerCase()}>{bias}</b></div><div><span>SIGNAL</span><b>{s.status}</b></div><div><span>CONFIDENCE</span><b>{s.confidence||0}%</b></div></div><div className="analysis-points"><div><TrendingUp size={17}/><div><b>Trend</b><span>{analysis.trend}</span></div></div><div><Activity size={17}/><div><b>Momentum</b><span>{analysis.momentum}</span></div></div><div><Target size={17}/><div><b>Price position</b><span>{analysis.pricePosition}</span></div></div><div><WalletCards size={17}/><div><b>Volatility</b><span>{analysis.volatility}</span></div></div></div></div><div className="panel"><PanelHead title="What SNIPER XAUUSD Sees" subtitle="Live indicator snapshot"/><div className="insight-list"><p><b>EMA:</b> {fmt(ind.ema20,2)} vs {fmt(ind.ema50,2)}.</p><p><b>RSI:</b> {fmt(ind.rsi,1)}.</p><p><b>ATR:</b> {fmt(ind.atr,2)}.</p><p><b>Timeframe:</b> {timeframe}.</p><p><b>Latest signal:</b> {latestSignal?`${latestSignal.status} at ${fmt(latestSignal.entry,2)}`:"none yet"}.</p></div></div></div></section>
     ,Admin:<AdminPanel user={user}/>
   }[tab];
 
   return <div className="app"><aside><div className="brand"><div className="logo">A</div><div><strong>SNIPER XAUUSD</strong><small>AI GOLD INTELLIGENCE</small></div></div><nav>{nav.map(([n,I])=><button type="button" className={tab===n?"active":""} onClick={()=>setTab(n)} key={n}><I size={17}/>{n}</button>)}</nav><div className="side-note"><ShieldCheck size={16}/><span>No MT5 required<br/><small>Twelve Data → SNIPER XAUUSD engine</small></span></div></aside>
-    <main><header><div><div className="eyebrow">MARKET INTELLIGENCE</div><h1>{tab}</h1></div><div className="header-actions"><div className={monitoring?"status live-status":"status"}><i/> {monitoring?"LIVE MONITORING ACTIVE":"FEED OFFLINE"}</div><span className="user-chip">{user?.email || "Member"}</span><button className="iconbtn" onClick={enablePush} title="Enable entry notifications"><Bell size={18}/></button><button className="logout-btn" onClick={onLogout}>Logout</button></div></header>{page}<footer><span>© SNIPER XAUUSD AI</span><span>Market data source: {data.source||"not connected"} · XAUUSD is OTC and quotes vary by provider.</span></footer></main>
+    <main><header><div><div className="eyebrow">MARKET INTELLIGENCE</div><h1>{tab}</h1></div><div className="header-actions"><div className={monitoring?"status live-status":"status"}><i/> {monitoring?"LIVE MONITORING ACTIVE":"FEED OFFLINE"}</div><span className="user-chip">{user?.email || "Member"}</span><button className="iconbtn" onClick={enablePush} title="Enable entry notifications"><Bell size={18}/></button><button className="logout-btn" onClick={onLogout}>Logout</button></div></header>{page}<footer><span>© SNIPER XAUUSD</span><span>Market data source: {data.source||"not connected"} · XAUUSD is OTC and quotes vary by provider.</span></footer></main>
     <div className="mobile-nav">{nav.map(([n,I])=><button type="button" className={tab===n?"active":""} onClick={()=>setTab(n)} key={n}><I size={18}/><span>{n.replace("AI Analysis","AI")}</span></button>)}</div>
   </div>;
 }
@@ -134,7 +178,7 @@ function DashboardApp({ user, onLogout }){
 function AuthScreen({ mode, setMode, onAuthed }) {
   const [email,setEmail]=useState(""); const [name,setName]=useState(""); const [password,setPassword]=useState(""); const [confirm,setConfirm]=useState(""); const [busy,setBusy]=useState(false); const [error,setError]=useState("");
   async function submit(e){ e.preventDefault(); setError(""); if(mode==="register" && password!==confirm){setError("Password confirmation does not match.");return;} setBusy(true); try{ const r=await fetch(`/api/auth/${mode}`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email,name,password})}); const j=await r.json(); if(!r.ok) throw new Error(j.error||"Request failed"); onAuthed(j.user); }catch(err){setError(err.message)}finally{setBusy(false)} }
-  return <div className="auth-wrap"><div className="auth-card"><div className="brand auth-brand"><div className="logo">A</div><div><strong>SNIPER XAUUSD</strong><small>AI GOLD INTELLIGENCE</small></div></div><div className="auth-kicker">GOLD INTELLIGENCE PLATFORM</div><h1>{mode==="register"?"Create your SNIPER XAUUSD account":"Welcome back"}</h1><p className="auth-sub">{mode==="register"?"Register first to access the SNIPER XAUUSD dashboard.":"Login to continue to SNIPER XAUUSD AI."}</p><form onSubmit={submit}>{mode==="register"&&<label>Name<input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name" required/></label>}<label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" required/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" minLength="8" required/></label>{mode==="register"&&<label>Confirm Password<input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} placeholder="••••••••" minLength="8" required/></label>}{error&&<div className="auth-error">{error}</div>}<button className="primary auth-submit" disabled={busy}>{busy?"Please wait…":mode==="register"?"CREATE ACCOUNT":"LOGIN"}</button></form><div className="auth-switch">{mode==="register"?<>Already registered? <button onClick={()=>setMode("login")}>Login</button></>:<>New to SNIPER XAUUSD? <button onClick={()=>setMode("register")}>Create account</button></>}</div><small className="auth-note">Dashboard access requires an authenticated SNIPER XAUUSD account. Subscription access is checked after login.</small></div></div>;
+  return <div className="auth-wrap"><div className="auth-card"><div className="brand auth-brand"><div className="logo">A</div><div><strong>SNIPER XAUUSD</strong><small>AI GOLD INTELLIGENCE</small></div></div><div className="auth-kicker">GOLD INTELLIGENCE PLATFORM</div><h1>{mode==="register"?"Create your SNIPER XAUUSD account":"Welcome back"}</h1><p className="auth-sub">{mode==="register"?"Register first to access the SNIPER XAUUSD dashboard.":"Login to continue to SNIPER XAUUSD."}</p><form onSubmit={submit}>{mode==="register"&&<label>Name<input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name" required/></label>}<label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" required/></label><label>Password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" minLength="8" required/></label>{mode==="register"&&<label>Confirm Password<input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} placeholder="••••••••" minLength="8" required/></label>}{error&&<div className="auth-error">{error}</div>}<button className="primary auth-submit" disabled={busy}>{busy?"Please wait…":mode==="register"?"CREATE ACCOUNT":"LOGIN"}</button></form><div className="auth-switch">{mode==="register"?<>Already registered? <button onClick={()=>setMode("login")}>Login</button></>:<>New to SNIPER XAUUSD? <button onClick={()=>setMode("register")}>Create account</button></>}</div><small className="auth-note">Dashboard access requires an authenticated SNIPER XAUUSD account. Subscription access is checked after login.</small></div></div>;
 }
 function Landing({ onStart }) { return <div className="landing"><div className="landing-top"><div className="brand"><div className="logo">A</div><div><strong>SNIPER XAUUSD</strong><small>AI GOLD INTELLIGENCE</small></div></div><button className="ghost" onClick={()=>onStart("login")}>LOGIN</button></div><div className="landing-hero"><span className="muted">XAUUSD · REAL-TIME INTELLIGENCE</span><h1>Trade gold with a<br/><em>clearer market view.</em></h1><p>Live XAUUSD data, multi-timeframe signals, TP/SL monitoring, macro news and AI-style technical context in one platform.</p><div className="landing-actions"><button className="primary" onClick={()=>onStart("register")}>CREATE ACCOUNT</button><button className="ghost" onClick={()=>onStart("login")}>LOGIN</button></div></div><div className="landing-features"><span>LIVE XAUUSD</span><span>M1 · M5 · M15 · M30 · H1</span><span>TP1 · TP2 · SL · BE MONITOR</span><span>HIGH-IMPACT NEWS</span></div></div> }
 function SubscriptionGate({ user, onLogout }) { return <div className="gate"><div className="gate-card"><div className="brand auth-brand"><div className="logo">A</div><div><strong>SNIPER XAUUSD</strong><small>AI GOLD INTELLIGENCE</small></div></div><span className="muted">ACCOUNT ACCESS</span><h1>Subscription required</h1><p>Your account is registered, but an active subscription is required to open the trading dashboard.</p><div className="gate-info"><span>Account</span><b>{user?.email}</b></div><button className="primary">VIEW PLANS</button><button className="ghost wide" onClick={onLogout}>LOG OUT</button><small>Payment and automatic subscription activation will be connected after the membership system is configured.</small></div></div> }
