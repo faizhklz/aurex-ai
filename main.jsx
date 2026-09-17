@@ -27,27 +27,18 @@ function PanelHead({title,subtitle,icon:Icon=Activity}) { return <div className=
 function SignalCard({s, large=false}) {
   const direction = s.status || "WAITING";
   const result = s.signalStatus || (direction === "BUY" || direction === "SELL" ? "ACTIVE" : "WAITING");
-
-  return (
-    <div className={"signal "+(direction==="BUY"?"buy":direction==="SELL"?"sell":"wait")+(large?" large":"")}>
-      <div className="signal-top">
-        <span className="pill">{direction} · {result}</span>
-        <strong>{s.title}</strong>
-      </div>
-
-      <p>{s.note}</p>
-
-      <div className="signal-grid">
-        <Metric label="ENTRY" value={fmt(s.entry,2)}/>
-        <Metric label="STOP LOSS" value={fmt(s.sl,2)}/>
-        <Metric label="TP1" value={fmt(s.tp1,2)}/>
-        <Metric label="TP2" value={fmt(s.tp2,2)}/>
-        <Metric label="TP3" value={fmt(s.tp3,2)}/>
-        <Metric label="CONFIDENCE" value={`${s.confidence||0}%`}/>
-        <Metric label="SIGNAL TIME" value={s.candleTime ? new Date(s.candleTime).toLocaleTimeString() : "—"}/>
-      </div>
+  return <div className={"signal "+(direction==="BUY"?"buy":direction==="SELL"?"sell":"wait")+(large?" large":"")}>
+    <div className="signal-top"><span className="pill">{direction} · {result}</span><strong>{s.title}</strong></div><p>{s.note}</p>
+    <div className="signal-grid">
+      <Metric label="ENTRY" value={fmt(s.entry,2)}/>
+      <Metric label="STOP LOSS" value={fmt(s.sl,2)}/>
+      <Metric label="TP1" value={fmt(s.tp1,2)}/>
+      <Metric label="TP2" value={fmt(s.tp2,2)}/>
+      <Metric label="TP3" value={fmt(s.tp3,2)}/>
+      <Metric label="CONFIDENCE" value={`${s.confidence||0}%`}/>
+      <Metric label="SIGNAL TIME" value={s.candleTime ? new Date(s.candleTime).toLocaleTimeString() : "—"}/>
     </div>
-  );
+  </div>;
 }
 function LatestSignal({signal}) { return <div className="latest-signal"><div><span>LATEST CONFIRMED SIGNAL</span><b className={signal.status.toLowerCase()}>{signal.status} · {signal.timeframe}</b></div><div><small>ENTRY</small><strong>{fmt(signal.entry,2)}</strong></div><div><small>TIME</small><strong>{signal.candleTime?new Date(signal.candleTime).toLocaleTimeString():"—"}</strong></div><div><small>SL / TP1</small><strong>{fmt(signal.sl,2)} / {fmt(signal.tp1,2)}</strong></div></div>; }
 
@@ -64,16 +55,50 @@ function DashboardApp({ user, onLogout }){
   useEffect(()=>{ try { const saved=JSON.parse(localStorage.getItem("aurex-history")||"[]"); if(Array.isArray(saved)) setHistory(saved); } catch {} },[]);
 
   useEffect(()=>{
-    const sig=data.signal; if(!sig || !sig.id || sig.status==="WAITING") return;
-    if(previousSignal.current !== sig.id){
-      if(!initialSignal.current && notif && "Notification" in window && Notification.permission==="granted") new Notification(`AUREX ${sig.status} — ${sig.timeframe}`,{body:`ENTRY ${fmt(sig.entry)} | SL ${fmt(sig.sl)} | TP1 ${fmt(sig.tp1)} | TP2 ${fmt(sig.tp2)} | TP3 ${fmt(sig.tp3)} | ${sig.candleTime?new Date(sig.candleTime).toLocaleTimeString():""}`});
-      previousSignal.current=sig.id; initialSignal.current=false;
-      setHistory(prev=>{
-        if(prev.some(x=>x.key===sig.id)) return prev;
-        const next=[{key:sig.id,time:sig.candleTime||sig.updated,timeframe:sig.timeframe,status:sig.status,title:sig.title,entry:sig.entry,sl:sig.sl,tp1:sig.tp1,tp2:sig.tp2,tp3:sig.tp3,confidence:sig.confidence},...prev].slice(0,100);
-        localStorage.setItem("aurex-history",JSON.stringify(next)); return next;
+    const sig=data.signal;
+    if(!sig || !sig.id || sig.status==="WAITING") return;
+
+    const result=sig.signalStatus || "ACTIVE";
+    const eventKey=`${sig.id}:${result}`;
+
+    if(previousSignal.current === eventKey) return;
+
+    if(!initialSignal.current && notif && "Notification" in window && Notification.permission==="granted"){
+      new Notification(`AUREX ${sig.status} — ${result}`,{
+        body:`ENTRY ${fmt(sig.entry)} | SL ${fmt(sig.sl)} | TP1 ${fmt(sig.tp1)} | TP2 ${fmt(sig.tp2)} | TP3 ${fmt(sig.tp3)}`
       });
     }
+
+    previousSignal.current=eventKey;
+    initialSignal.current=false;
+
+    setHistory(prev=>{
+      const existing=prev.find(x=>x.key===sig.id);
+
+      const record={
+        key:sig.id,
+        time:sig.candleTime||sig.updated,
+        updated:sig.updated,
+        timeframe:sig.timeframe,
+        status:sig.status,
+        result,
+        title:sig.title,
+        entry:sig.entry,
+        sl:sig.sl,
+        tp1:sig.tp1,
+        tp2:sig.tp2,
+        tp3:sig.tp3,
+        confidence:sig.confidence
+      };
+
+      const next=existing
+        ? prev.map(x=>x.key===sig.id?{...x,...record}:x)
+        : [record,...prev];
+
+      const trimmed=next.slice(0,100);
+      localStorage.setItem("aurex-history",JSON.stringify(trimmed));
+      return trimmed;
+    });
   },[data.signal,notif]);
 
   async function enablePush(){ if(!("Notification" in window)){alert("Browser notifications are not supported on this device/browser.");return;} const p=await Notification.requestPermission(); setNotif(p==="granted"); }
@@ -94,7 +119,7 @@ function DashboardApp({ user, onLogout }){
       <section className="lower"><div className="panel"><PanelHead title="Detection Logic" subtitle="Signal only when completed-candle filters align" icon={Sparkles}/><div className="logic"><span>{timeframe} trend</span><span>EMA structure</span><span>RSI</span><span>MACD</span><span>Volatility</span><span>Market structure</span></div></div><div className="panel"><PanelHead title="Alerts" subtitle={notif?"Browser entry alerts armed":"Turn on entry alerts"} icon={Bell}/><button className="primary" onClick={enablePush}>{notif?"Notifications Enabled":"Enable Entry Notifications"}</button></div></section>
     </>,
     Signals:<section className="page-stack"><div className="page-intro"><div><span className="muted">SIGNAL CENTER</span><h2>Trade Signals</h2><p>Each timeframe has its own live setup and latest confirmed entry.</p></div><div className="bias-card"><span>MARKET BIAS</span><b className={s.status.toLowerCase()}>{bias}</b></div></div><div className="panel timeframe-panel"><TimeframeBar timeframe={timeframe} onTimeframe={setTimeframe}/></div><div className="signal-page-grid"><div className="panel"><PanelHead title="Current Setup" subtitle={`Live ${timeframe} XAUUSD feed`} icon={Target}/><SignalCard s={s} large/>{latestSignal&&<LatestSignal signal={latestSignal}/>}</div><div className="panel"><PanelHead title={`${timeframe} Indicators`} subtitle="Current technical readings"/><div className="stats-list"><Metric label="PRICE" value={fmt(data.price,2)}/><Metric label="EMA20" value={fmt(ind.ema20,2)}/><Metric label="EMA50" value={fmt(ind.ema50,2)}/><Metric label="RSI" value={fmt(ind.rsi,1)}/><Metric label="ATR" value={fmt(ind.atr,2)}/><Metric label="SOURCE" value={data.source||"—"}/></div></div></div></section>,
-    History:<section className="page-stack"><div className="page-intro"><div><span className="muted">SIGNAL LOG</span><h2>Signal History</h2><p>Only confirmed BUY/SELL entries are recorded.</p></div><div className="history-count"><b>{history.length}</b><span>records</span></div></div><div className="panel table-panel">{history.length?<table><thead><tr><th>TIME</th><th>TF</th><th>STATUS</th><th>ENTRY</th><th>SL</th><th>TP1</th><th>TP2</th><th>TP3</th></tr></thead><tbody>{history.map(x=><tr key={x.key}><td>{new Date(x.time).toLocaleTimeString()}</td><td>{x.timeframe}</td><td><span className={"table-pill "+x.status.toLowerCase()}>{x.status}</span></td><td>{fmt(x.entry,2)}</td><td>{fmt(x.sl,2)}</td><td>{fmt(x.tp1,2)}</td><td>{fmt(x.tp2,2)}</td><td>{fmt(x.tp3,2)}</td></tr>)}</tbody></table>:<div className="empty-page"><HistoryIcon size={34}/><b>No confirmed signals recorded yet</b><span>AUREX will record a new entry when a timeframe confirms a setup.</span></div>}</div></section>,
+    History:<section className="page-stack"><div className="page-intro"><div><span className="muted">SIGNAL LOG</span><h2>Signal History</h2><p>Only confirmed BUY/SELL entries are recorded.</p></div><div className="history-count"><b>{history.length}</b><span>records</span></div></div><div className="panel table-panel">{history.length?<table><thead><tr><th>TIME</th><th>TF</th><th>SIGNAL</th><th>RESULT</th><th>ENTRY</th><th>SL</th><th>TP1</th><th>TP2</th><th>TP3</th></tr></thead><tbody>{history.map(x=><tr key={x.key}><td>{new Date(x.time).toLocaleTimeString()}</td><td>{x.timeframe}</td><td><span className={"table-pill "+x.status.toLowerCase()}>{x.status}</span></td><td><span className={"table-pill "+String(x.result||"ACTIVE").toLowerCase().replaceAll(" ","-")}>{x.result||"ACTIVE"}</span></td><td>{fmt(x.entry,2)}</td><td>{fmt(x.sl,2)}</td><td>{fmt(x.tp1,2)}</td><td>{fmt(x.tp2,2)}</td><td>{fmt(x.tp3,2)}</td></tr>)}</tbody></table>:<div className="empty-page"><HistoryIcon size={34}/><b>No confirmed signals recorded yet</b><span>AUREX will record a new entry when a timeframe confirms a setup.</span></div>}</div></section>,
     News:<section className="page-stack"><div className="page-intro"><div><span className="muted">LIVE MACRO CALENDAR</span><h2>Gold Market News</h2><p>High-impact US macro releases relevant to XAUUSD.</p></div><div className={news.configured?"news-status live-news":"news-status"}><span className="dot"/> {news.configured?"LIVE CALENDAR":"CALENDAR OFFLINE"}</div></div><div className="news-grid">{upcoming.length?upcoming.map(e=><div className="panel news-event" key={e.id}><div className="event-top"><span className="tag">{e.impact}</span><small>{e.country}</small></div><h3>{e.title}</h3><div className="event-time">{e.date||"—"} · {e.time||"time TBA"}</div><div className="event-values"><span><small>PREVIOUS</small><b>{e.previous??"—"}</b></span><span><small>FORECAST</small><b>{e.forecast??"—"}</b></span><span><small>ACTUAL</small><b>{e.actual??"—"}</b></span></div></div>):<div className="panel notice-panel"><ShieldCheck size={18}/><div><b>{news.error?"Live calendar connection failed":"No high-impact events returned"}</b><span>{news.error||"The calendar provider returned no high-impact events right now."}</span></div></div>}</div><div className="panel notice-panel"><ShieldCheck size={18}/><div><b>Calendar source: {news.source||"—"}</b><span>Events are informational. Release times and values can change; always verify against the official release.</span></div></div></section>,
     "AI Analysis":<section className="page-stack"><div className="page-intro"><div><span className="muted">AUREX INTELLIGENCE</span><h2>AI Market Analysis</h2><p>Readable technical context from the selected live timeframe.</p></div><div className="analysis-badge"><Sparkles size={15}/> {timeframe}</div></div><div className="analysis-grid"><div className="panel analysis-main"><PanelHead title="Current Market Read" subtitle="Technical context — not a guarantee" icon={Sparkles}/><div className="analysis-hero"><div><span>BIAS</span><b className={s.status.toLowerCase()}>{bias}</b></div><div><span>SIGNAL</span><b>{s.status}</b></div><div><span>CONFIDENCE</span><b>{s.confidence||0}%</b></div></div><div className="analysis-points"><div><TrendingUp size={17}/><div><b>Trend</b><span>{analysis.trend}</span></div></div><div><Activity size={17}/><div><b>Momentum</b><span>{analysis.momentum}</span></div></div><div><Target size={17}/><div><b>Price position</b><span>{analysis.pricePosition}</span></div></div><div><WalletCards size={17}/><div><b>Volatility</b><span>{analysis.volatility}</span></div></div></div></div><div className="panel"><PanelHead title="What AUREX Sees" subtitle="Live indicator snapshot"/><div className="insight-list"><p><b>EMA:</b> {fmt(ind.ema20,2)} vs {fmt(ind.ema50,2)}.</p><p><b>RSI:</b> {fmt(ind.rsi,1)}.</p><p><b>ATR:</b> {fmt(ind.atr,2)}.</p><p><b>Timeframe:</b> {timeframe}.</p><p><b>Latest signal:</b> {latestSignal?`${latestSignal.status} at ${fmt(latestSignal.entry,2)}`:"none yet"}.</p></div></div></div></section>
     ,Admin:<AdminPanel user={user}/>
