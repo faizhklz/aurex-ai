@@ -24,10 +24,31 @@ function Chart({ candles, timeframe, onTimeframe }) {
 function TimeframeBar({ timeframe, onTimeframe }) { return <div className="timeframe-bar"><span className="tf-label">LIVE TIMEFRAME</span>{TIMEFRAMES.map(tf=><button type="button" key={tf} className={timeframe===tf?"selected":""} onClick={()=>onTimeframe(tf)}>{tf}</button>)}</div>; }
 function Metric({label,value}) { return <div className="metric"><span>{label}</span><b>{value}</b></div>; }
 function PanelHead({title,subtitle,icon:Icon=Activity}) { return <div className="panel-head"><div><b>{title}</b>{subtitle && <span>{subtitle}</span>}</div><Icon size={17}/></div>; }
-function SignalCard({s, large=false}) { return <div className={"signal "+(s.status==="BUY"?"buy":s.status==="SELL"?"sell":"wait")+(large?" large":"")}>
-  <div className="signal-top"><span className="pill">{s.status}</span><strong>{s.title}</strong></div><p>{s.note}</p>
-  <div className="signal-grid"><Metric label="ENTRY" value={fmt(s.entry,2)}/><Metric label="STOP LOSS" value={fmt(s.sl,2)}/><Metric label="TP1" value={fmt(s.tp1,2)}/><Metric label="TP2" value={fmt(s.tp2,2)}/><Metric label="TP3" value={fmt(s.tp3,2)}/><Metric label="CONFIDENCE" value={`${s.confidence||0}%`}/><Metric label="SIGNAL TIME" value={s.candleTime ? new Date(s.candleTime).toLocaleTimeString() : "—"}/></div>
-</div>; }
+function SignalCard({s, large=false}) {
+  const direction = s.status || "WAITING";
+  const result = s.signalStatus || (direction === "BUY" || direction === "SELL" ? "ACTIVE" : "WAITING");
+
+  return (
+    <div className={"signal "+(direction==="BUY"?"buy":direction==="SELL"?"sell":"wait")+(large?" large":"")}>
+      <div className="signal-top">
+        <span className="pill">{direction} · {result}</span>
+        <strong>{s.title}</strong>
+      </div>
+
+      <p>{s.note}</p>
+
+      <div className="signal-grid">
+        <Metric label="ENTRY" value={fmt(s.entry,2)}/>
+        <Metric label="STOP LOSS" value={fmt(s.sl,2)}/>
+        <Metric label="TP1" value={fmt(s.tp1,2)}/>
+        <Metric label="TP2" value={fmt(s.tp2,2)}/>
+        <Metric label="TP3" value={fmt(s.tp3,2)}/>
+        <Metric label="CONFIDENCE" value={`${s.confidence||0}%`}/>
+        <Metric label="SIGNAL TIME" value={s.candleTime ? new Date(s.candleTime).toLocaleTimeString() : "—"}/>
+      </div>
+    </div>
+  );
+}
 function LatestSignal({signal}) { return <div className="latest-signal"><div><span>LATEST CONFIRMED SIGNAL</span><b className={signal.status.toLowerCase()}>{signal.status} · {signal.timeframe}</b></div><div><small>ENTRY</small><strong>{fmt(signal.entry,2)}</strong></div><div><small>TIME</small><strong>{signal.candleTime?new Date(signal.candleTime).toLocaleTimeString():"—"}</strong></div><div><small>SL / TP1</small><strong>{fmt(signal.sl,2)} / {fmt(signal.tp1,2)}</strong></div></div>; }
 
 function DashboardApp({ user, onLogout }){
